@@ -70,7 +70,24 @@ def main():
     # 获取接近 1 年的日线行情数据（以 250 个交易日约1年计，我们将拉去稍多一些方便计算初始特征）
     try:
         # 获取最近 300 个交易日以涵盖整个前一年并留有10天特征冗余
-        df_hist = ak.stock_zh_a_hist(symbol=ticker, period="daily", adjust="qfq")
+        import pandas as pd
+        prefix = "sh" if ticker.startswith("6") else "sz"
+        prefixed = f"{prefix}{ticker}"
+        df_hist = ak.stock_zh_a_daily(symbol=prefixed, adjust="qfq")
+        
+        df_hist.rename(columns={
+            'date': '日期', 'open': '开盘', 'high': '最高', 'low': '最低', 
+            'close': '收盘', 'volume': '成交量', 'amount': '成交额', 'turnover': '换手率'
+        }, inplace=True)
+        # 获取衍生特征以满足DL模块要求
+        df_hist['日期'] = pd.to_datetime(df_hist['日期']).dt.strftime('%Y-%m-%d')
+        df_hist['前收盘'] = df_hist['收盘'].shift(1)
+        df_hist['涨跌额'] = df_hist['收盘'] - df_hist['前收盘']
+        df_hist['涨跌幅'] = df_hist['涨跌额'] / df_hist['前收盘'] * 100
+        df_hist['振幅'] = (df_hist['最高'] - df_hist['最低']) / df_hist['前收盘'] * 100
+        df_hist['换手率'] = df_hist['换手率'] * 100 # 转换为百分比
+        df_hist.dropna(inplace=True)
+        df_hist.reset_index(drop=True, inplace=True)
         # 修改为获取过去 3 年的数据 (大约 750 个交易日)
         df_hist = df_hist.tail(750).reset_index(drop=True)
         if df_hist.empty or len(df_hist) < 20:

@@ -72,7 +72,24 @@ def main():
     # 4. 前往时间切片，接入真实市场当期/次日行情，并由评估官复盘
     print("\n>>>> 进入真实时空盘后结算，获取市场真实盈亏并开启反思阶段 <<<<")
     try:
-        df_hist = ak.stock_zh_a_hist(symbol=ticker, period="daily", adjust="qfq")
+        import pandas as pd
+        prefix = "sh" if ticker.startswith("6") else "sz"
+        prefixed = f"{prefix}{ticker}"
+        df_hist = ak.stock_zh_a_daily(symbol=prefixed, adjust="qfq")
+        
+        df_hist.rename(columns={
+            'date': '日期', 'open': '开盘', 'high': '最高', 'low': '最低', 
+            'close': '收盘', 'volume': '成交量', 'amount': '成交额', 'turnover': '换手率'
+        }, inplace=True)
+        # 获取衍生特征以满足DL模块要求
+        df_hist['日期'] = pd.to_datetime(df_hist['日期']).dt.strftime('%Y-%m-%d')
+        df_hist['前收盘'] = df_hist['收盘'].shift(1)
+        df_hist['涨跌额'] = df_hist['收盘'] - df_hist['前收盘']
+        df_hist['涨跌幅'] = df_hist['涨跌额'] / df_hist['前收盘'] * 100
+        df_hist['振幅'] = (df_hist['最高'] - df_hist['最低']) / df_hist['前收盘'] * 100
+        df_hist['换手率'] = df_hist['换手率'] * 100 # 转换为百分比
+        df_hist.dropna(inplace=True)
+        df_hist.reset_index(drop=True, inplace=True)
         if not df_hist.empty:
             latest_date = df_hist['日期'].iloc[-1]
             real_pnl = float(df_hist['涨跌幅'].iloc[-1])

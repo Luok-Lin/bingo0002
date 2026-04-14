@@ -12,28 +12,69 @@ st.markdown("""
     .reportview-container {
         margin-top: -2em;
     }
-    .stButton>button {
-        color: white;
-        border-radius: 8px;
-        height: 3em;
-        width: 100%;
-        font-weight: bold;
-        font-size: 16px;
-    }
-    .st-bw {
-        border-radius: 10px;
-    }
-    .metric-value {
-        font-size: 32px !important;
-        font-weight: bold !important;
-    }
+    
+    /* 渐变全息大标题 */
     h1 {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        color: #2F3C7E;
-        font-weight: 800;
+        background: -webkit-linear-gradient(45deg, #00C9FF, #92FE9D);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 900;
+        letter-spacing: 1px;
     }
+    
+    /* 弱化二级标题颜色让其在暗色更通透 */
     h2, h3 {
-        color: #3f51b5;
+        color: #A0AEC0;
+        font-weight: 700;
+    }
+    
+    /* 深空呼吸感操作按钮 */
+    .stButton>button {
+        background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
+        border: none;
+        color: #0B0F19 !important;
+        border-radius: 30px;
+        height: 3.5em;
+        width: 100%;
+        font-weight: 800;
+        font-size: 16px;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(0, 201, 255, 0.3);
+    }
+    .stButton>button:hover {
+        transform: scale(1.03);
+        box-shadow: 0 6px 20px rgba(0, 201, 255, 0.6);
+        color: #000 !important;
+    }
+    
+    /* 磨砂玻璃质感的关键数据指标卡片 */
+    [data-testid="metric-container"] {
+        background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 1.2rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        margin-bottom: 20px;
+    }
+    [data-testid="metric-container"]:hover {
+        transform: translateY(-4px);
+        border: 1px solid #00C9FF;
+        box-shadow: 0 8px 30px rgba(0, 201, 255, 0.15);
+    }
+    
+    /* 放大数据卡片的值字号 */
+    [data-testid="stMetricValue"] {
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
+        color: #FFFFFF !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 1.1rem !important;
+        color: #E2E8F0 !important;
     }
     
     /* 自定义精美日志的滚动容器 */
@@ -69,14 +110,91 @@ st.sidebar.header("⚙️ 推演参数配置")
 ticker = st.sidebar.text_input("股票代码", value="000001", help="输入A股代码，如000001或600519")
 days = st.sidebar.number_input("推演天数", min_value=1, max_value=750, value=30, help="向前推演运行的交易日天数")
 
+st.sidebar.markdown("---")
+st.sidebar.markdown("""
+<div style='text-align: center; color: #A0AEC0; font-size: 0.8rem; margin-bottom: 2rem;'>
+<span style='font-size: 1.5rem;'>🤖</span><br>
+Powered by <strong>Agentic RAG</strong> & <strong>PyTorch</strong><br>
+<em>Quant Architecture Lab</em>
+</div>
+""", unsafe_allow_html=True)
+
+def render_agent_card(name, icon, text, color, height="145px"):
+    import html
+    safe_text = html.escape(str(text)) if text else "..."
+    return f"""
+    <div style="background: linear-gradient(180deg, rgba(26,28,36,0.9) 0%, rgba(11,15,25,0.9) 100%); 
+                border-top: 4px solid {color}; padding: 15px; border-radius: 12px; margin-bottom: 15px; 
+                height: {height}; box-shadow: 0 8px 16px rgba(0,0,0,0.6); overflow-y: auto;">
+        <div style="color: {color}; font-weight: 800; font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">{icon}</span> {name}
+        </div>
+        <div style="color: #CBD5E1; font-size: 13px; line-height: 1.5; font-family: 'Courier New', Courier, monospace;">
+            {safe_text}
+        </div>
+    </div>
+    """
+
 if st.sidebar.button("▶️ 启动深度推演", type="primary"):
     st.toast(f"正在对 {ticker} 展开 {days} 天的多智能体兵棋推演...", icon="🔥")
     
-    # 建立一个占位符用来流式刷新精美日志
-    log_container = st.expander("🕵️ 实时多智能体兵棋推演沙盘", expanded=True)
-    log_placeholder = log_container.empty()
+    st.markdown("---")
+    st.markdown("### 📡 实时态势感知沙盘 (Live Agent Radar)")
     
-    with st.spinner("🚀 系统总指挥部已下达调令，智囊团正在进行数据挖掘、多空辩论与量化演算..."):
+    # 顶部时间轴
+    date_ph = st.empty()
+    date_ph.markdown("<br><h3 style='text-align: center; color: #92FE9D;'>⏳ 正在初始化时空模拟器...</h3><br>", unsafe_allow_html=True)
+    
+    # 架构版面：分为三大板块
+    st.markdown("#### 🧠 1. 前线信息搜集兵团 (Intelligence Gatherers)")
+    c1, c2, c3 = st.columns(3)
+    ph_tech = c1.empty()
+    ph_fund = c2.empty()
+    ph_macro = c3.empty()
+    
+    c4, c5, c6 = st.columns(3)
+    ph_sent = c4.empty()
+    ph_smart = c5.empty()
+    ph_rag = c6.empty()
+    
+    st.markdown("#### 🤺 2. 多空博弈枢纽 (Command & C-Examine)")
+    d1, d2 = st.columns(2)
+    ph_bull = d1.empty()
+    ph_bear = d2.empty()
+    
+    st.markdown("#### ⚖️ 3. 最终决策与战略反思 (Execution & Memory)")
+    c_ref, c_mem = st.columns(2)
+    ph_referee = c_ref.empty()
+    ph_memory = c_mem.empty()
+    
+    # 隐藏的原始日志后台，供极客查看
+    raw_expander = st.expander("🛠️ 原始终端数据流 (Raw Console Log)")
+    raw_ph = raw_expander.empty()
+    
+    state = {
+        "tech": "💤 挂起", "fund": "💤 挂起", "macro": "💤 挂起",
+        "sent": "💤 挂起", "smart": "💤 挂起", "rag": "💤 挂起",
+        "bull": "🥊 等待分析报告", "bear": "🥊 等待分析报告",
+        "referee": "⚖️ 数据截断等待中", "memory": "🧠 记忆突触沉睡"
+    }
+    
+    def refresh_ui():
+        ph_tech.markdown(render_agent_card("量价技术分析", "📈", state["tech"], "#38BDF8"), unsafe_allow_html=True)
+        ph_fund.markdown(render_agent_card("价值基本面分析", "🏢", state["fund"], "#A78BFA"), unsafe_allow_html=True)
+        ph_macro.markdown(render_agent_card("宏观趋势预警", "🌍", state["macro"], "#F472B6"), unsafe_allow_html=True)
+        ph_sent.markdown(render_agent_card("网络散户情绪", "💬", state["sent"], "#34D399"), unsafe_allow_html=True)
+        ph_smart.markdown(render_agent_card("游资主力追踪", "💸", state["smart"], "#FB923C"), unsafe_allow_html=True)
+        ph_rag.markdown(render_agent_card("深度研报特工 (RAG)", "🔎", state["rag"], "#FBBF24"), unsafe_allow_html=True)
+        
+        ph_bull.markdown(render_agent_card("多方先锋辩手 (Bull)", "🐂", state["bull"], "#EF4444", "170px"), unsafe_allow_html=True)
+        ph_bear.markdown(render_agent_card("空方看空辩手 (Bear)", "🐻", state["bear"], "#10B981", "170px"), unsafe_allow_html=True)
+        
+        ph_referee.markdown(render_agent_card("风控裁判官 (Referee)", "🛡️", state["referee"], "#FDE047", "160px"), unsafe_allow_html=True)
+        ph_memory.markdown(render_agent_card("量化反射中枢 (Memory)", "✨", state["memory"], "#2DD4BF", "160px"), unsafe_allow_html=True)
+
+    refresh_ui()
+    
+    with st.spinner("🚀 系统指挥部已下达演算指令，智囊团正在高频运转..."):
         process = subprocess.Popen(
             ["python", "-u", "main.py", str(ticker), str(days)],
             stdout=subprocess.PIPE,
@@ -86,53 +204,51 @@ if st.sidebar.button("▶️ 启动深度推演", type="primary"):
             env=dict(os.environ, HTTP_PROXY="", HTTPS_PROXY="", http_proxy="", https_proxy="", ALL_PROXY="", all_proxy="") # 绕过系统代理防止爬虫被阻断
         )
         
-        logs = []
+        raw_logs = []
         for line in process.stdout:
-            logs.append(line.strip())
-            if len(logs) > 50:  # 缓存最新的 50 行以渲染 UI
-                logs.pop(0)
+            line_str = line.strip()
+            if not line_str: continue
             
-            # 美化日志行
-            formatted_html = "<div class='log-container'>"
-            for log in logs:
-                html_class = "log-normal"
-                icon = "⚙️"
+            raw_logs.append(line_str)
+            if len(raw_logs) > 30: raw_logs.pop(0)
+            raw_ph.code("\n".join(raw_logs), language="bash")
+            
+            content = line_str.split("] ")[-1] if "]" in line_str else line_str
+            
+            if "【时间游标滑动】" in line_str:
+                d_str = line_str.split("当前日期:")[-1].replace("========", "").strip()
+                date_ph.markdown(f"""
+                <div style='text-align:center; padding:15px; background: rgba(0, 201, 255, 0.08); border: 1px solid #00C9FF; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 0 15px rgba(0, 201, 255, 0.2);'>
+                    <h2 style='margin:0; color:#00C9FF; font-weight:800;'>⏱️ 战略推演日节点：{d_str}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+                for k in state: state[k] = "🔍 情报收集中..."
+                refresh_ui()
+            
+            elif "技术面" in line_str:
+                state["tech"] = content; refresh_ui()
+            elif "基本面" in line_str:
+                state["fund"] = content; refresh_ui()
+            elif "宏观" in line_str:
+                state["macro"] = content; refresh_ui()
+            elif "舆情" in line_str:
+                state["sent"] = content; refresh_ui()
+            elif "主力资金" in line_str:
+                state["smart"] = content; refresh_ui()
+            elif "RAG" in line_str or "研报" in line_str:
+                state["rag"] = content; refresh_ui()
+            elif "多方" in line_str or "看多" in line_str:
+                state["bull"] = content; refresh_ui()
+            elif "空方" in line_str or "看空" in line_str:
+                state["bear"] = content; refresh_ui()
+            elif "裁判" in line_str or "风控" in line_str or "交易接口" in line_str:
+                state["referee"] = content; refresh_ui()
+            elif "量化策略" in line_str or "经验" in line_str or "公理" in line_str or "实际账户盈亏" in line_str:
+                state["memory"] = content; refresh_ui()
                 
-                # 正则/关键词匹配改变颜色和图标
-                if "时间游标滑动" in log: 
-                    html_class = "log-date"
-                    icon = "📅"
-                    log = f"<hr style='border:1px dashed #4e4e6a; margin:10px 0;'> {log}"
-                elif "System" in log: 
-                    html_class = "log-sys"
-                    icon = "💻"
-                elif "分析师" in log:
-                    html_class = "log-analyst"
-                    icon = "📊"
-                elif "特工" in log or "RAG" in log:
-                    html_class = "log-rag"
-                    icon = "🔎"
-                elif "辩手" in log:
-                    html_class = "log-debate"
-                    icon = "🤺"
-                elif "裁判" in log:
-                    html_class = "log-referee"
-                    icon = "⚖️"
-                elif "风控" in log or "交易接口" in log:
-                    html_class = "log-risk"
-                    icon = "🛡️"
-                elif "✅" in log or "💎" in log or "全新底层原则" in log:
-                    html_class = "log-success"
-                    icon = "✨"
-
-                formatted_html += f"<div class='log-line {html_class}'><span>{icon}</span> {log}</div>"
-            formatted_html += "</div>"
-            
-            log_placeholder.markdown(formatted_html, unsafe_allow_html=True)
-            
         process.wait()
     
-    st.success("🏁 各作战兵团推演杀青！战场与情报数据已全部沉淀入知识库。")
+    st.success("🏁 战略沙盘推演完成！战场与情报数据已全部沉淀入分布式微观知识库。")
 
 # --- 战报可视化 ---
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
