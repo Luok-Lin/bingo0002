@@ -226,7 +226,7 @@ def main():
         bear_case = bear_researcher.cross_examine(my_case=bear_initial, opponent_case=bull_initial)
         
         # 裁判最终定夺
-        referee_decision = referee.step(bull_case, bear_case, ticker=ticker)
+        referee_decision = referee.step(bull_case, bear_case, ticker=ticker, reports=all_reports)
         
         # 阶段3: 风控与执行
         final_instruction = risk_manager.step(ticker, referee_decision)
