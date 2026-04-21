@@ -621,6 +621,15 @@ class TraderAgent(BaseAgent):
         return target_action
 
 class QuantitativeRiskReflector(BaseAgent):
+    
+    # 核心超参数配置：隔离硬编码的反馈调整阈值结构
+    PARAMS = {
+        "SEVERE_DRAWDOWN": -1.5,     # 严重回撤判定阈值 (%)
+        "RECENT_PRINCIPLES": 10,     # 给LLM参考的最近公理数
+        "DUPLICATE_CHECK_COUNT": 5,  # 查重的最近公理数
+        "DUPLICATE_CHAR_THRES": 10   # 查重字符截断重合度阈值
+    }
+
     def __init__(self, name: str, memory_bank):
         super().__init__(name, "量化分析与策略反思官")
         self.memory_bank = memory_bank
@@ -679,7 +688,7 @@ class QuantitativeRiskReflector(BaseAgent):
 
         reflection_text = ""
         if action in ["BUY", "SELL"]:
-            if actual_pnl < -1.5:
+            if actual_pnl < self.PARAMS.get("SEVERE_DRAWDOWN", -1.5):
                 reflection_text = f"严重回撤 ({actual_pnl:.2f}%)！当前统计: {stats_msg}。系统应考虑降低贝塔参与度。"
             elif actual_pnl > 0:
                 reflection_text = f"策略获利 ({actual_pnl:.2f}%)。当前统计: {stats_msg}。"
@@ -712,21 +721,39 @@ class QuantitativeRiskReflector(BaseAgent):
             high_value_materials = self.memory_bank.crystallize_knowledge(None)
             if high_value_materials:
                 self.log(f"🧠 [自我进化] 检测到了高分致胜经验池，正在呼叫大模型将其结晶为公理法则！")
+                
+                # 读取已有原则，防止大模型复读
+                existing_principles = "无"
+                if len(self.memory_bank.principles) > 0:
+                    # 取最近的 N 条参考值
+                    recent_n = self.PARAMS.get("RECENT_PRINCIPLES", 10)
+                    recent = [p.get("principle", "") for p in self.memory_bank.principles[-recent_n:]]
+                    existing_principles = "\n- " + "\n- ".join(recent)
+                
                 prompt = self.config.get(
                     "principle_prompt_template",
-                    "你是一名为对冲基金撰写《内部交易原则》(Redbook)的总监。以下是系统在实盘后积累的、被验证赚了钱的优质高分经验片段：\n{high_value_materials}\n请你将这些碎片提炼为1条【高度抽象、具有普适性的量化交易公理】，不能超过40个字，要求极度精炼。"
-                ).format(high_value_materials=high_value_materials)
+                    "你是一名为对冲基金撰写《内部交易原则》(Redbook)的风控总监。以下是系统近期积累的实盘交易记忆（包含高价值致胜经验与亏损的证伪反例）：\n{high_value_materials}\n\n已有公理参考：\n{existing_principles}\n\n请在提炼时严格遵循【反例证伪（Falsifiability）机制】：\n1. 任何原则都必须带有边界和适用条件，请结合提供的[失败教训]来界定这条新经验的“死穴”或“失效场景”。\n2. 仔细对比已有公理，寻找反直觉角度，严禁重复。\n\n请提炼为1条【具有普适性且带有证伪条件的量化交易公理】(格式：核心法则 + 失效边界)。不能超过60个字，要求极度精炼。"
+                ).format(high_value_materials=high_value_materials, existing_principles=existing_principles)
+                
                 principle_text = self.query_llm(prompt)
                 
-                # 存入到原则文件中，并更新向量库标记（略去复杂标记以防覆盖，只存json）
-                import datetime
-                self.memory_bank.principles.append({
-                    "date": datetime.datetime.now().strftime('%Y-%m-%d'),
-                    "ticker": ticker,
-                    "principle": principle_text
-                })
-                self.memory_bank._save_principles()
-                self.log(f"📜 [全新底层原则已确立并入库]: {principle_text}")
+                # 提取配置参数
+                dup_count = self.PARAMS.get("DUPLICATE_CHECK_COUNT", 5)
+                char_thres = self.PARAMS.get("DUPLICATE_CHAR_THRES", 10)
+                
+                # 再次过滤，如果返回的内容完全雷同，则抛弃
+                if len(self.memory_bank.principles) > 0 and principle_text[:char_thres] in "".join([p.get("principle", "") for p in self.memory_bank.principles[-dup_count:]]):
+                    self.log(f"⚠️ [复读机拦截] 本次结晶的知识过度雷同，已放弃入库。")
+                else:
+                    # 存入到原则文件中，并更新向量库标记（略去复杂标记以防覆盖，只存json）
+                    import datetime
+                    self.memory_bank.principles.append({
+                        "date": datetime.datetime.now().strftime('%Y-%m-%d'),
+                        "ticker": ticker,
+                        "principle": principle_text
+                    })
+                    self.memory_bank._save_principles()
+                    self.log(f"📜 [全新底层原则已确立并入库]: {principle_text}")
         except Exception as e:
             pass
 
