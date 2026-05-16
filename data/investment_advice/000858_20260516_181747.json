@@ -1,0 +1,222 @@
+{
+  "ticker": "000858",
+  "generated_at": "2026-05-16 18:25:09",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 86.87,
+    "pct_change": -2.382290144960097,
+    "turnover": 0.9305099676777078,
+    "volume": 36117869.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.775,
+    "reason": "第 1 轮后两个分析师观点达成一致：negative。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "next_action": "按裁判裁决进入风控执行。",
+    "stability_note": "稳定度中等，建议结合盘中验证。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.75,
+      "bull_ratio": 0.1,
+      "bear_ratio": 0.9,
+      "reasoning": "技术破位与主力派发共振，光脚阴线伴随放量流出，空头动能强劲，短期趋势向下。",
+      "thought_process": "技术面光脚阴线破位与资金面放量出逃形成双重利空共振，主力离场意愿坚决，下跌趋势确立。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价连续下挫，最新K线收光脚阴线，空头动能强。前日放量滞涨确认抛压，技术指标显著转弱。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "判断结果：**出货派发**。\n\n理由：主力资金连续两日大幅净流出，且流出规模随股价下跌显著放大，呈现典型的价跌量增流出特征，表明主力正在积极派发离场。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.4,
+      "bull_ratio": 0.6,
+      "bear_ratio": 0.4,
+      "reasoning": "经营稳健叠加集团增持利好，虽估值数据缺失，但利好支撑明确，存在轻微正向预期差。",
+      "thought_process": "基本面中性源于数据缺失而非恶化，新闻面增持计划提供实质性利好支撑，合成后偏向轻微看多。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "neutral",
+          "confidence": 0.5,
+          "reasoning": "白酒龙头经营稳健，但数据缺失无法验证估值安全边际。依据风控原则，证据不足时应避免主观判断，维持中性。结论：neutral。",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.3,
+          "reasoning": "证据不足，仅作轻微倾向；研报买入评级与集团增持计划构成利好支撑。（证据不足，仅作轻微倾向）",
+          "thought_process": "东吴证券给予买入评级，且集团实施巨额增持，虽证据完整性不足，但现有信息指向积极。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.23,
+    "bear_score": 1.32,
+    "trend_strength": 0.7032258064516129,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "opponent_wrong",
+          "decision": "SELL",
+          "confidence": 0.75,
+          "wrong_agent": "分析师B",
+          "reasoning": "分析师A高置信度(0.75)且空头权重极高(0.90)，技术破位与放量流出形成共振，短期下行风险确立。分析师B置信度低(0.40)，多头理由仅靠集团增持难以对抗技术面强空头趋势，且估值缺失，判断依据薄弱，属于明显弱势方。",
+          "next_action": "执行卖出指令，规避下跌风险。"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.75,
+          "bull_ratio": 0.1,
+          "bear_ratio": 0.9,
+          "reasoning": "技术破位与主力派发共振，光脚阴线伴随放量流出，空头动能强劲，短期趋势向下。",
+          "thought_process": "技术面光脚阴线破位与资金面放量出逃形成双重利空共振，主力离场意愿坚决，下跌趋势确立。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价连续下挫，最新K线收光脚阴线，空头动能强。前日放量滞涨确认抛压，技术指标显著转弱。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "判断结果：**出货派发**。\n\n理由：主力资金连续两日大幅净流出，且流出规模随股价下跌显著放大，呈现典型的价跌量增流出特征，表明主力正在积极派发离场。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.4,
+          "bull_ratio": 0.6,
+          "bear_ratio": 0.4,
+          "reasoning": "经营稳健叠加集团增持利好，虽估值数据缺失，但利好支撑明确，存在轻微正向预期差。",
+          "thought_process": "基本面中性源于数据缺失而非恶化，新闻面增持计划提供实质性利好支撑，合成后偏向轻微看多。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "neutral",
+              "confidence": 0.5,
+              "reasoning": "白酒龙头经营稳健，但数据缺失无法验证估值安全边际。依据风控原则，证据不足时应避免主观判断，维持中性。结论：neutral。",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.3,
+              "reasoning": "证据不足，仅作轻微倾向；研报买入评级与集团增持计划构成利好支撑。（证据不足，仅作轻微倾向）",
+              "thought_process": "东吴证券给予买入评级，且集团实施巨额增持，虽证据完整性不足，但现有信息指向积极。"
+            }
+          ]
+        }
+      },
+      {
+        "round": 1,
+        "judge": {
+          "mode": "unclear",
+          "decision": "SELL",
+          "confidence": 0.85,
+          "wrong_agent": "",
+          "reasoning": "双方分析师已达成空头共识，技术破位与资金流出形成共振，基本面利好无法对冲短期风险，维持卖出判断。",
+          "next_action": "execute_sell_order"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.8,
+          "bull_ratio": 0.1,
+          "bear_ratio": 0.9,
+          "reasoning": "裁判官确认技术破位与资金流出主导短期走势，基本面利好无法对冲放量下跌风险，维持空头判断，对方忽视趋势力量。",
+          "thought_process": "技术面光脚阴线破位与资金面放量出逃形成双重利空共振，主力离场意愿坚决，下跌趋势确立。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价连续下挫，最新K线收光脚阴线，空头动能强。前日放量滞涨确认抛压，技术指标显著转弱。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "判断结果：**出货派发**。\n\n理由：主力资金连续两日大幅净流出，且流出规模随股价下跌显著放大，呈现典型的价跌量增流出特征，表明主力正在积极派发离场。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ],
+          "conceded": false
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.75,
+          "bull_ratio": 0.2,
+          "bear_ratio": 0.8,
+          "reasoning": "裁判确认技术破位与资金流出共振，基本面增持利好无法对冲短期风险。承认判断依据薄弱，修正为空头观点。",
+          "thought_process": "基本面中性源于数据缺失而非恶化，新闻面增持计划提供实质性利好支撑，合成后偏向轻微看多。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "neutral",
+              "confidence": 0.5,
+              "reasoning": "白酒龙头经营稳健，但数据缺失无法验证估值安全边际。依据风控原则，证据不足时应避免主观判断，维持中性。结论：neutral。",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.3,
+              "reasoning": "证据不足，仅作轻微倾向；研报买入评级与集团增持计划构成利好支撑。（证据不足，仅作轻微倾向）",
+              "thought_process": "东吴证券给予买入评级，且集团实施巨额增持，虽证据完整性不足，但现有信息指向积极。"
+            }
+          ],
+          "conceded": true
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "第 1 轮后两个分析师观点达成一致：negative。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "position_percent": 0.0
+  },
+  "cache_hit": false,
+  "stability_score": 0.6587,
+  "stability_level": "medium",
+  "stability_note": "稳定度中等，建议结合盘中验证。",
+  "stability_diagnostics": {
+    "parse_fail_count": 3,
+    "rule_fallback_count": 0,
+    "empty_reason_count": 0,
+    "consensus_tech_fund": false,
+    "referee_action": "SELL",
+    "risk_action": "HOLD",
+    "recommendation_action": "HOLD"
+  }
+}

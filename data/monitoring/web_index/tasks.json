@@ -1,0 +1,153 @@
+[
+  {
+    "task_id": "61ffd597-c3f5-4937-bec8-1d1f43ee2ff1",
+    "type": "daily_evolution_manual",
+    "status": "running",
+    "created_at": "2026-05-16 16:36:08",
+    "started_at": "2026-05-16 16:36:08",
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "daily_evolution"
+  },
+  {
+    "task_id": "9cc6ec6f-ed07-4851-8db3-2c0bc636867f",
+    "type": "daily_evolution_manual",
+    "status": "queued",
+    "created_at": "2026-05-16 16:36:13",
+    "started_at": null,
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "daily_evolution"
+  },
+  {
+    "task_id": "8484bed2-bd50-46ec-9f1c-f538a5d83786",
+    "type": "daily_evolution_manual",
+    "status": "running",
+    "created_at": "2026-05-16 16:51:37",
+    "started_at": "2026-05-16 16:51:37",
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "daily_evolution"
+  },
+  {
+    "task_id": "b6825230-e99f-4296-977c-ad1365cab31a",
+    "type": "daily_evolution_manual",
+    "status": "queued",
+    "created_at": "2026-05-16 16:51:38",
+    "started_at": null,
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "daily_evolution"
+  },
+  {
+    "task_id": "ccd36cff-3852-45fa-956d-3dadf33739bc",
+    "type": "advice_settlement_manual",
+    "status": "done",
+    "created_at": "2026-05-16 17:28:55",
+    "started_at": "2026-05-16 17:28:55",
+    "ended_at": "2026-05-16 17:29:04",
+    "message": "ok",
+    "result": {
+      "status": "ok",
+      "settled_count": 6,
+      "pending_count": 16,
+      "skipped_count": 0,
+      "dashboard_updated_at": "2026-05-16 17:29:04"
+    },
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "081add6e-2e2b-4675-a49a-137a12b3a8cc",
+    "type": "advice_settlement_manual",
+    "status": "done",
+    "created_at": "2026-05-16 18:18:26",
+    "started_at": "2026-05-16 18:18:26",
+    "ended_at": "2026-05-16 18:18:35",
+    "message": "ok",
+    "result": {
+      "status": "ok",
+      "settled_count": 0,
+      "pending_count": 21,
+      "skipped_count": 0,
+      "dashboard_updated_at": "2026-05-16 18:18:35"
+    },
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "b3468615-3f1a-4d52-9c4f-c73a04b7f1f3",
+    "type": "advice_settlement_manual",
+    "status": "running",
+    "created_at": "2026-05-16 18:18:36",
+    "started_at": "2026-05-16 18:18:36",
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "9454b78c-bb9b-4457-a4d3-637b0365e4dc",
+    "type": "advice_settlement_manual",
+    "status": "queued",
+    "created_at": "2026-05-16 18:18:37",
+    "started_at": null,
+    "ended_at": null,
+    "message": "",
+    "result": null,
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "30b9e3c2-dbb1-40b8-9657-46025d3c7814",
+    "type": "advice_settlement_manual",
+    "status": "done",
+    "created_at": "2026-05-16 19:33:07",
+    "started_at": "2026-05-16 19:33:07",
+    "ended_at": "2026-05-16 19:33:20",
+    "message": "ok",
+    "result": {
+      "status": "ok",
+      "settled_count": 0,
+      "pending_count": 23,
+      "skipped_count": 0,
+      "dashboard_updated_at": "2026-05-16 19:33:20"
+    },
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "22cd2316-88b4-4eea-a7d8-9936055aede6",
+    "type": "advice_settlement_manual",
+    "status": "done",
+    "created_at": "2026-05-16 19:40:23",
+    "started_at": "2026-05-16 19:40:23",
+    "ended_at": "2026-05-16 19:40:40",
+    "message": "ok",
+    "result": {
+      "status": "ok",
+      "settled_count": 0,
+      "pending_count": 23,
+      "skipped_count": 0,
+      "dashboard_updated_at": "2026-05-16 19:40:40"
+    },
+    "lock_key": "advice_settlement"
+  },
+  {
+    "task_id": "17068b97-3c0c-4526-8832-b220f13d7945",
+    "type": "advice_settlement_manual",
+    "status": "done",
+    "created_at": "2026-05-16 19:50:24",
+    "started_at": "2026-05-16 19:50:24",
+    "ended_at": "2026-05-16 19:51:01",
+    "message": "ok",
+    "result": {
+      "status": "ok",
+      "settled_count": 0,
+      "pending_count": 23,
+      "skipped_count": 0,
+      "dashboard_updated_at": "2026-05-16 19:51:01"
+    },
+    "lock_key": "advice_settlement"
+  }
+]

@@ -1,0 +1,83 @@
+{
+  "ticker": "600381",
+  "generated_at": "2026-05-15 23:18:27",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 5.31,
+    "pct_change": 4.940711462450594,
+    "turnover": 7.739291324881832,
+    "volume": 45434341.0
+  },
+  "recommendation": {
+    "action": "SELL",
+    "execution_action": "SELL 33.36%",
+    "position_percent": 33.36,
+    "confidence": 0.725,
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | 建议配置仓位: 33.36%",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.65,
+      "bull_ratio": 0.3,
+      "bear_ratio": 0.7,
+      "reasoning": "高位T字板伴随主力大额流出，量价背离明显，资金借势派发意图强烈，风险大于机会。",
+      "thought_process": "技术面强势与资金面派发构成背离。T字板虽显承接，但主力大额流出是实质性行为，往往预示上涨末端，资金逻辑权重高于形态。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "连续涨停确立强势趋势，最新一日放量T字板回封，资金承接力强，上涨动能延续。positive",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "判断：出货派发。\n\n理由：股价连涨，但第二日主力大额净流出近2800万，远超首日流入。量价背离明显，主力借拉升机会派发筹码。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.8,
+      "bull_ratio": 0.15,
+      "bear_ratio": 0.85,
+      "reasoning": "基本面恶化叠加年报延期披露利空，估值虚高无安全边际，投机风险主导，强烈看空。",
+      "thought_process": "基本面亏损(PE负)与高估值(PB 3.18)矛盾，新闻高置信度确认年报亏损及延期披露，风险提示明确。无正向预期差，仅存投机博弈。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "动态PE为负显示公司亏损，盈利能力堪忧；PB 3.18高于账面价值，缺乏安全边际。基本面恶化，风险较高。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "negative",
+          "confidence": 0.85,
+          "reasoning": "年报亏损且延期披露，基本面恶化，公司提示风险，投机氛围浓厚，风险大于机会。",
+          "thought_process": "公司2025年净利润亏损3732万元，基本面疲软；年报延期披露通常隐含审计或内控风险；虽股价异动上涨，但公司主动提示风险，表明基本面无法支撑当前涨势，潜在风险巨大。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.315,
+    "bear_score": 1.135,
+    "trend_strength": 0.5655172413793104,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "SELL",
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | 建议配置仓位: 33.36%",
+    "position_percent": 33.36
+  }
+}

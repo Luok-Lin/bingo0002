@@ -11,3 +11,7 @@ langchain-huggingface
 sentence-transformers
 scikit-learn
 optuna
+fastapi
+uvicorn
+apscheduler
+python-multipart

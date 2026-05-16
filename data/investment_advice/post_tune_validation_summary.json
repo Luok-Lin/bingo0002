@@ -1,0 +1,74 @@
+{
+  "tickers": [
+    "603156",
+    "002885",
+    "300210",
+    "300943",
+    "600381",
+    "688096"
+  ],
+  "results": [
+    {
+      "ticker": "603156",
+      "status": "ok",
+      "action": "BUY",
+      "position_percent": 50.46,
+      "confidence": 0.725,
+      "reason": "两个综合分析师方向一致(positive)，直接输出最终判断。 | 建议配置仓位: 50.46%",
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/603156_20260516_011750.json"
+    },
+    {
+      "ticker": "002885",
+      "status": "ok",
+      "action": "HOLD",
+      "position_percent": 0.0,
+      "confidence": 0.6,
+      "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/002885_20260516_012206.json"
+    },
+    {
+      "ticker": "300210",
+      "status": "ok",
+      "action": "HOLD",
+      "position_percent": 0.0,
+      "confidence": 0.6,
+      "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/300210_20260516_012604.json"
+    },
+    {
+      "ticker": "300943",
+      "status": "timeout",
+      "action": "TIMEOUT",
+      "position_percent": -1,
+      "confidence": 0,
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/300943_20260516_013045.json"
+    },
+    {
+      "ticker": "600381",
+      "status": "ok",
+      "action": "HOLD",
+      "position_percent": 0.0,
+      "confidence": 0.675,
+      "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/600381_20260516_013545.json"
+    },
+    {
+      "ticker": "688096",
+      "status": "timeout",
+      "action": "TIMEOUT",
+      "position_percent": -1,
+      "confidence": 0,
+      "output_path": "/Users/luok/Desktop/数据科学/TradingAgents_RAG_DL/data/investment_advice/post_tune_validation/688096_20260516_014029.json"
+    }
+  ],
+  "ok_count": 4,
+  "action_distribution": {
+    "BUY": 1,
+    "HOLD": 3
+  },
+  "buy_hold_ratio": {
+    "BUY": 1,
+    "HOLD": 3,
+    "SELL": 0
+  }
+}

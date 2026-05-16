@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TradingAgents 投研平台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header id="appHeader" class="header">
+      <div class="header-main">
+        <h1>TradingAgents 智能投研平台</h1>
+        <div class="header-right">
+          <span id="currentUserBadge" class="header-user hidden">未登录</span>
+          <button id="registerBtn">注册</button>
+          <button id="loginBtn">登录</button>
+          <button id="logoutBtn" class="hidden">退出</button>
+          <div class="header-badge">中国人民大学</div>
+          <button id="modeSwitchBtn" class="btn-primary mode-switch-btn">切换到管理者模式</button>
+        </div>
+      </div>
+    </header>
+    <div id="globalStatusBar" class="global-status-bar info hidden"></div>
+
+    <section id="authGate" class="auth-gate">
+      <div class="auth-gate-card">
+        <div class="auth-gate-brand">
+          <span class="auth-gate-logo">TA</span>
+          <div>
+            <div class="auth-gate-kicker">TradingAgents 智能投研平台</div>
+            <h2>请先登录后使用系统</h2>
+          </div>
+        </div>
+        <p class="auth-gate-desc">为保护账户数据与建议记录，登录后才可访问投资建议、历史总览与管理功能。</p>
+        <div class="auth-gate-points">
+          <span class="auth-gate-point">多 Agent 协同决策</span>
+          <span class="auth-gate-point">稳定度评分与风险提示</span>
+          <span class="auth-gate-point">用户/管理者双模式</span>
+        </div>
+        <div class="actions auth-gate-actions">
+          <button id="authGateLoginBtn" class="btn-primary">立即登录</button>
+          <button id="authGateRegisterBtn">注册新账号</button>
+        </div>
+      </div>
+    </section>
+
+    <main id="appMain" class="main hidden">
+      <aside id="sidebarUser" class="sidebar">
+        <button class="tab-btn active" data-tab="advice">投资建议</button>
+        <button id="overviewTabBtnUser" class="tab-btn" data-tab="overview">历史投资建议总览</button>
+      </aside>
+      <aside id="sidebarAdmin" class="sidebar hidden">
+        <button class="tab-btn" data-tab="training">初始化训练</button>
+        <button class="tab-btn" data-tab="evolution">自进化中心</button>
+        <button id="overviewTabBtnAdmin" class="tab-btn" data-tab="overview">系统总览</button>
+      </aside>
+
+      <section class="content">
+        <section id="overview" class="tab-panel active">
+          <h2 id="overviewTitle">系统总览</h2>
+          <div class="metric-strip">
+            <div class="metric-card">
+              <div id="metricTitlePrimary" class="metric-title">建议总量</div>
+              <div class="metric-value" id="metricAdviceCount">-</div>
+            </div>
+            <div class="metric-card">
+              <div id="metricTitleSecondary" class="metric-title">经验样本数</div>
+              <div class="metric-value" id="metricReflectionRows">-</div>
+            </div>
+            <div class="metric-card">
+              <div id="metricTitleThird" class="metric-title">Reward均值</div>
+              <div class="metric-value" id="metricRewardAvg">-</div>
+            </div>
+            <div class="metric-card">
+              <div id="metricTitleFourth" class="metric-title">负Reward占比</div>
+              <div class="metric-value" id="metricNegRatio">-</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="refreshOverviewBtn" class="btn-primary">刷新总览</button>
+            <span id="overviewUpdatedAt" class="actions-meta">最后刷新：-</span>
+          </div>
+          <div id="overviewFeedback" class="inline-feedback info hidden"></div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>建议分布</h3>
+              <div id="overviewAdviceDistCards">-</div>
+            </div>
+            <div class="card">
+              <h3 id="overviewSecondaryCardTitle">经验统计</h3>
+              <div id="overviewReflectionStatsCards">-</div>
+            </div>
+          </div>
+          <div id="userAdviceEvalCard" class="card">
+            <h3>历史建议预测评估</h3>
+            <div id="userAdviceEval">-</div>
+          </div>
+          <div class="card">
+            <h3>最新建议列表（按时间）</h3>
+            <div id="overviewAdviceTable"></div>
+          </div>
+          <div id="adminUsersCard" class="card hidden">
+            <h3>用户列表（管理者）</h3>
+            <div class="actions">
+              <button id="refreshUsersBtn">刷新用户列表</button>
+              <span id="usersCountText" class="actions-meta">用户数：-</span>
+            </div>
+            <div id="adminUsersTable">-</div>
+          </div>
+        </section>
+
+        <section id="training" class="tab-panel">
+          <h2>初始化训练</h2>
+          <div class="card">
+            <h3>训练标的来源</h3>
+            <div class="actions">
+              <span id="trainSourceText" class="actions-meta">默认文件：个人_持股排名.csv</span>
+              <input id="trainCsvFileInput" type="file" accept=".csv,text/csv" />
+              <button id="uploadTrainCsvBtn">导入CSV文件</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label>TopN<input id="trainTopN" type="number" value="10" min="1" max="50" /></label>
+            <label>回测天数<input id="trainDays" type="number" value="22" min="1" max="120" /></label>
+            <label>博弈轮数<input id="trainDebateDepth" type="number" value="2" min="1" max="6" /></label>
+            <label class="checkbox"><input id="trainSkipTune" type="checkbox" checked />跳过自动调参</label>
+          </div>
+          <div class="actions">
+            <button id="runTrainingBtn" class="btn-primary">启动训练任务</button>
+            <button id="refreshTasksBtn">刷新任务列表</button>
+          </div>
+          <div class="card">
+            <h3>任务列表</h3>
+            <div id="taskList">-</div>
+          </div>
+        </section>
+
+        <section id="advice" class="tab-panel">
+          <h2>结构化投资建议</h2>
+          <div class="form-grid">
+            <label>股票代码<input id="adviceTicker" value="603156" /></label>
+            <label>博弈轮数<input id="adviceDepth" type="number" value="2" min="1" max="6" /></label>
+          </div>
+          <div class="actions">
+            <button id="runAdviceBtn" class="btn-primary">生成建议</button>
+            <button id="loadLatestAdviceBtn">读取最新建议</button>
+          </div>
+          <div id="adviceFeedback" class="inline-feedback info hidden"></div>
+          <div class="terminal-grid">
+            <div class="card">
+              <h3>交易信号灯</h3>
+              <div class="signal-panel">
+                <div class="signal-item">
+                  <span class="signal-label">建议动作</span>
+                  <span id="signalAction" class="signal-value">-</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">仓位建议</span>
+                  <span id="signalPosition" class="signal-value">-</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">裁判置信度</span>
+                  <span id="signalConfidence" class="signal-value">-</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Agent 权重雷达图</h3>
+              <canvas id="agentRadarCanvas" width="360" height="220"></canvas>
+            </div>
+            <div class="card">
+              <h3>对应标的迷你K线</h3>
+              <svg id="miniPnlChart" viewBox="0 0 360 220" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="card">
+              <h3>建议稳定度</h3>
+              <div id="stabilityPanel" class="stability-panel">稳定度：-</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>结构化建议</h3>
+            <div id="adviceSummary">-</div>
+          </div>
+          <div class="card">
+            <h3>多Agent决策流程图</h3>
+            <div id="traceFlow">-</div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>分析师观点</h3>
+              <div id="traceAnalysts">-</div>
+            </div>
+            <div class="card">
+              <h3>裁判与风控</h3>
+              <div id="traceReferee">-</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>博弈时间线</h3>
+            <div id="traceTimeline">-</div>
+          </div>
+        </section>
+
+        <section id="evolution" class="tab-panel">
+          <h2>自进化中心（自动+手动）</h2>
+          <div class="card">
+            <h3>建议兑现闭环（T+1）</h3>
+            <div class="actions">
+              <button id="settleAdviceBtn">立即兑现一次</button>
+              <span id="settlementStatsText" class="actions-meta">已兑现：- | 待兑现：-</span>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label>股票列表（逗号分隔，可空）<input id="evolveTickers" placeholder="留空默认watchlist/top10" /></label>
+            <label>博弈轮数<input id="evolveDepth" type="number" value="2" min="1" max="6" /></label>
+            <label>模式
+              <select id="evolveMode">
+                <option value="backtest_update">backtest_update（经验增量）</option>
+                <option value="advice_only">advice_only（仅建议）</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="runEvolveBtn" class="btn-primary">手动触发今日进化</button>
+            <button id="refreshEvolveHistoryBtn">刷新进化历史</button>
+          </div>
+          <div class="card">
+            <h3>进化历史</h3>
+            <div id="evolveHistory">-</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="adminModal" class="modal hidden">
+      <div class="modal-card">
+        <h3>管理员验证</h3>
+        <p id="adminModalText">切换到管理者模式需要管理员密码。</p>
+        <input id="adminPasswordInput" type="password" placeholder="请输入管理员密码" />
+        <div id="adminError" class="admin-error"></div>
+        <div class="actions">
+          <button id="adminSubmitBtn" class="btn-primary">验证并进入</button>
+          <button id="adminCancelBtn">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="registerModal" class="modal hidden">
+      <div class="modal-card">
+        <h3>用户注册</h3>
+        <p>请使用邮箱和手机号完成注册。</p>
+        <div class="form-grid">
+          <label>邮箱<input id="registerEmailInput" type="email" placeholder="name@example.com" /></label>
+          <label>手机号<input id="registerPhoneInput" type="text" placeholder="13800138000" /></label>
+          <label>昵称<input id="registerNicknameInput" type="text" placeholder="可选，默认自动生成" /></label>
+          <label>密码<input id="registerPasswordInput" type="password" placeholder="至少 6 位" /></label>
+        </div>
+        <div id="registerError" class="admin-error"></div>
+        <div class="actions">
+          <button id="registerSubmitBtn" class="btn-primary">注册</button>
+          <button id="registerCancelBtn">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loginModal" class="modal hidden">
+      <div class="modal-card">
+        <h3>用户登录</h3>
+        <p>请输入邮箱或手机号与密码。</p>
+        <div class="form-grid">
+          <label>邮箱或手机号<input id="loginAccountInput" type="text" placeholder="name@example.com / 13800138000" /></label>
+          <label>密码<input id="loginPasswordInput" type="password" placeholder="请输入密码" /></label>
+        </div>
+        <div id="loginError" class="admin-error"></div>
+        <div class="actions">
+          <button id="loginSubmitBtn" class="btn-primary">登录</button>
+          <button id="loginCancelBtn">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+

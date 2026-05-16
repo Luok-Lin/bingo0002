@@ -1,0 +1,145 @@
+{
+  "ticker": "603156",
+  "generated_at": "2026-05-16 04:13:13",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 46.78,
+    "pct_change": -1.1620536657511034,
+    "turnover": 1.4205945962224642,
+    "volume": 17903435.0
+  },
+  "recommendation": {
+    "action": "BUY",
+    "execution_action": "BUY 15.0%",
+    "position_percent": 15.0,
+    "confidence": 0.55,
+    "reason": "技术面资金流入与基本面高估形成典型预期差。分析师A置信度(0.60)高于B(0.45)，且资金流向对短期价格影响更直接。双方逻辑自洽，非一方错误，判定为资金驱动的短线博弈机会。 | 建议配置仓位: 15.0%",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.6,
+      "bull_ratio": 0.65,
+      "bear_ratio": 0.35,
+      "reasoning": "主力资金大幅净流入支撑股价，技术面回调确认为洗盘吸筹，回调即是机会，看多。",
+      "thought_process": "技术面滞涨与资金面巨额净流入互证，判定为典型主力压盘吸筹，技术回调系洗盘行为，资金意图主导后市。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价短期急涨后高位放量滞涨，连续两日收长上影线及阴线，资金分歧加大，抛压显现，短期调整风险较高。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：洗盘吸筹。\n\n理由：首日巨额净流入股价滞涨，为主力压盘吸筹；次日小幅流出股价回调，系清洗浮筹。整体资金大幅净流入，主力意在吸筹。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.45,
+      "bull_ratio": 0.3,
+      "bear_ratio": 0.7,
+      "reasoning": "估值显著高估缺乏安全边际，现金流隐忧与高估值形成负面预期差，基本面支撑不足，风险大于机会。",
+      "thought_process": "估值高估（PE 41倍）是硬约束，权重高于低置信度的股价强势。现金流隐忧与高估值不匹配，基本面透支严重。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "行业平均PE约25倍，当前41倍显著高估；PB近6倍缺乏安全边际。估值偏贵，投资性价比低。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.28,
+          "reasoning": "证据不足，仅作轻微倾向，研报利好与股价强势提供支撑，但现金流隐忧限制了信心。（证据不足，仅作轻微倾向）",
+          "thought_process": "综合分析：东吴证券研报给予‘增持’评级并指出Q1业绩超预期，市场表现上股价创历史新高且录得主力资金净流入，技术面与消息面共振偏多；但一季报经营性现金流大幅净流出构成基本面隐忧，考虑到证据完整性不足，判定为轻微看多。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "BUY",
+    "bull_score": 0.525,
+    "bear_score": 0.525,
+    "trend_strength": 0.0,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "expectation_gap",
+          "decision": "BUY",
+          "confidence": 0.55,
+          "wrong_agent": "",
+          "reasoning": "技术面资金流入与基本面高估形成典型预期差。分析师A置信度(0.60)高于B(0.45)，且资金流向对短期价格影响更直接。双方逻辑自洽，非一方错误，判定为资金驱动的短线博弈机会。",
+          "next_action": "监控主力资金持续性，若净流入转负或跌破关键技术位则止损。"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.6,
+          "bull_ratio": 0.65,
+          "bear_ratio": 0.35,
+          "reasoning": "主力资金大幅净流入支撑股价，技术面回调确认为洗盘吸筹，回调即是机会，看多。",
+          "thought_process": "技术面滞涨与资金面巨额净流入互证，判定为典型主力压盘吸筹，技术回调系洗盘行为，资金意图主导后市。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价短期急涨后高位放量滞涨，连续两日收长上影线及阴线，资金分歧加大，抛压显现，短期调整风险较高。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：首日巨额净流入股价滞涨，为主力压盘吸筹；次日小幅流出股价回调，系清洗浮筹。整体资金大幅净流入，主力意在吸筹。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.45,
+          "bull_ratio": 0.3,
+          "bear_ratio": 0.7,
+          "reasoning": "估值显著高估缺乏安全边际，现金流隐忧与高估值形成负面预期差，基本面支撑不足，风险大于机会。",
+          "thought_process": "估值高估（PE 41倍）是硬约束，权重高于低置信度的股价强势。现金流隐忧与高估值不匹配，基本面透支严重。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "行业平均PE约25倍，当前41倍显著高估；PB近6倍缺乏安全边际。估值偏贵，投资性价比低。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.28,
+              "reasoning": "证据不足，仅作轻微倾向，研报利好与股价强势提供支撑，但现金流隐忧限制了信心。（证据不足，仅作轻微倾向）",
+              "thought_process": "综合分析：东吴证券研报给予‘增持’评级并指出Q1业绩超预期，市场表现上股价创历史新高且录得主力资金净流入，技术面与消息面共振偏多；但一季报经营性现金流大幅净流出构成基本面隐忧，考虑到证据完整性不足，判定为轻微看多。"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "BUY",
+    "reason": "技术面资金流入与基本面高估形成典型预期差。分析师A置信度(0.60)高于B(0.45)，且资金流向对短期价格影响更直接。双方逻辑自洽，非一方错误，判定为资金驱动的短线博弈机会。 | 建议配置仓位: 15.0%",
+    "position_percent": 15.0
+  }
+}

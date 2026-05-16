@@ -1,0 +1,23 @@
+{
+  "ticker": "600381",
+  "backtest_limit": 1,
+  "auto_tune_enabled": false,
+  "total_days": 1,
+  "total_trades": 0,
+  "avg_real_pnl": 4.940711462450594,
+  "avg_effective_pnl": 0.0,
+  "win_rate": 0.0,
+  "start_date": "2026-05-14",
+  "end_date": "2026-05-14",
+  "rows": [
+    {
+      "date": "2026-05-14",
+      "next_date": "2026-05-15",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 4.940711462450594,
+      "effective_pnl": 0.0
+    }
+  ]
+}

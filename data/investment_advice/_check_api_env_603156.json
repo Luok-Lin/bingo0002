@@ -1,0 +1,83 @@
+{
+  "ticker": "603156",
+  "generated_at": "2026-05-16 04:07:46",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 46.78,
+    "pct_change": -1.1620536657511034,
+    "turnover": 1.4205945962224642,
+    "volume": 17903435.0
+  },
+  "recommendation": {
+    "action": "BUY",
+    "execution_action": "BUY 47.94%",
+    "position_percent": 47.94,
+    "confidence": 0.69,
+    "reason": "两个综合分析师方向一致(positive)，直接输出最终判断。 | 建议配置仓位: 47.94%",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.6,
+      "bull_ratio": 0.65,
+      "bear_ratio": 0.35,
+      "reasoning": "技术面虽现调整压力，但巨额资金流入揭示主力洗盘意图，资金逻辑主导，短期震荡后看涨。",
+      "thought_process": "技术面高位阴线显示抛压，但主力资金巨额净流入提供了有力反驳，判定技术走势为'主力洗盘'。资金行为逻辑优先级高于单纯K线形态，主力吸筹意图明显，支撑后市看涨。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价放量长阳突破后，连续两日高位放量震荡收阴，显示多头动能衰减且抛压增大，短期面临调整压力。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：洗盘吸筹。\n\n理由：股价微涨伴随巨额主力净流入，呈现典型量价背离。前日下跌流出为洗盘，今日大额资金进场且压制股价，意在低位吸筹。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.78,
+      "bull_ratio": 0.75,
+      "bear_ratio": 0.25,
+      "reasoning": "Q1业绩超预期叠加机构增持，确立正向预期差，基本面虽中性但增长逻辑强劲，综合看多。",
+      "thought_process": "基本面中性为底，新闻研报高置信度看多提供主要驱动力。Q1业绩超预期与机构增持形成显著正向预期差，现金流瑕疵被强劲增长逻辑对冲，多头优势明显。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "neutral",
+          "confidence": 0.5,
+          "reasoning": "",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.85,
+          "reasoning": "机构增持评级叠加Q1业绩超预期，净利润表现强劲，虽现金流短期承压，但增长逻辑确立，综合看多。",
+          "thought_process": "东吴证券给予'增持'评级，明确指出Q1业绩超预期且2026年开局重拾增长，确立多头基调。财报数据验证了净利润达8.08亿元，表现强劲。尽管经营性现金流为负且同比下滑构成财务瑕疵，但在'业绩超预期'的强叙事逻辑下，机构看多观点占据主导。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "BUY",
+    "bull_score": 0.975,
+    "bear_score": 0.405,
+    "trend_strength": 0.41304347826086957,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "BUY",
+    "reason": "两个综合分析师方向一致(positive)，直接输出最终判断。 | 建议配置仓位: 47.94%",
+    "position_percent": 47.94
+  }
+}

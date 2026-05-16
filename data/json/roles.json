@@ -5,6 +5,8 @@
   "MacroAnalyst": {"role": "宏观分析师"},
   "SmartMoneyAnalyst": {"role": "主力资金分析师"},
   "NewsAnalystAgent": {"role": "新闻研报专家"},
+  "TechnicalFlowAnalyst": {"role": "技术资金综合分析师"},
+  "FundamentalNewsAnalyst": {"role": "基本面新闻综合分析师"},
   "QuantResearcherAgent": {"role": "深度学习量化专家"},
   "BullResearcher": {"role": "看多辩手"},
   "BearResearcher": {"role": "看空辩手"},

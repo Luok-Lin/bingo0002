@@ -1,0 +1,83 @@
+{
+  "ticker": "603156",
+  "generated_at": "2026-05-15 22:15:33",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 46.78,
+    "pct_change": -1.1620536657511034,
+    "turnover": 1.4205945962224642,
+    "volume": 17903435.0
+  },
+  "recommendation": {
+    "action": "BUY",
+    "execution_action": "BUY 44.11%",
+    "position_percent": 44.11,
+    "confidence": 0.65,
+    "reason": "两个综合分析师方向一致(positive)，直接输出最终判断。 | 建议配置仓位: 44.11%",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.55,
+      "bull_ratio": 0.65,
+      "bear_ratio": 0.35,
+      "reasoning": "技术调整掩盖资金吸筹，巨量流入预示主力志在长远，洗盘后突破概率大。",
+      "thought_process": "技术面高位滞涨示弱，但资金面巨额净流入揭示主力吸筹意图。量价背离显示主力借调整洗盘，资金逻辑优先级高于技术形态。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价前期大幅拉升后高位滞涨，今日收阴且动量指标回落，短期调整压力较大。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断结果：**洗盘吸筹**。\n\n理由：股价企稳伴随巨额净流入，且流入额远超前一日流出，量价背离特征明显，显示主力压盘吸筹意图强烈。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.75,
+      "bull_ratio": 0.7,
+      "bear_ratio": 0.3,
+      "reasoning": "业绩反转确立，股价创新高验证趋势，高估值被增长预期消化，短期多头占优。",
+      "thought_process": "静态估值虽高，但2026一季报确立业绩反转趋势，股价创历史新高验证市场对成长性的认可。基本面改善的动态利好压倒静态估值压力，存在显著的业绩预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "行业平均PE约20倍，当前PE超40倍且PB近6倍，估值显著高估，缺乏安全边际。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "```json\n{\n\"thought_process\": \"2025年报显示业绩下滑，但2026年一季报营收与净利润双双大幅增长（超预期），确立反转趋势；券商给予'增持'评级并强调重拾增长；股价创历史新高验证市场信心。虽经营现金流为负，但整体基本面改善与市场情绪共振强烈。\",\n\"sentiment\": \"positive\",\n\"confidence\": 0.85,\n\"reasoning",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "BUY",
+    "bull_score": 0.882,
+    "bear_score": 0.417,
+    "trend_strength": 0.35796766743648967,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "BUY",
+    "reason": "两个综合分析师方向一致(positive)，直接输出最终判断。 | 建议配置仓位: 44.11%",
+    "position_percent": 44.11
+  }
+}

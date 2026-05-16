@@ -1,0 +1,222 @@
+{
+  "ticker": "601318",
+  "generated_at": "2026-05-16 18:11:26",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 55.5,
+    "pct_change": -2.4604569420035123,
+    "turnover": 1.1087209607048512,
+    "volume": 118190376.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.55,
+    "reason": "第 1 轮裁判确认这是预期差机会：A方资金流出硬数据主导短期走势，B方低估值逻辑提供安全边际但置信度不足。资金面与基本面出现背离，短期承压但下行空间有限，维持观望。",
+    "next_action": "按裁判裁决进入风控执行。",
+    "stability_note": "稳定度中等，建议结合盘中验证。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.4,
+      "bull_ratio": 0.35,
+      "bear_ratio": 0.65,
+      "reasoning": "技术面虽强但主力大额流出，量价背离显示机构派发，警惕诱多风险。",
+      "thought_process": "技术面多头与资金面流出形成背离，且数据描述存在冲突，判定为派发风险。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "股价连续攀升，收盘价逐日抬高。最新日收阳且放量，动量指标由负转正，技术面呈现多头强势特征。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "主力资金连续大额净流出，股价同步显著下跌，量价齐跌显示机构主动抛售意愿强烈，判定为出货派发。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.3,
+      "bull_ratio": 0.55,
+      "bear_ratio": 0.45,
+      "reasoning": "低估值提供安全边际，业绩增长预期形成微弱预期差，但证据不足，整体偏多但信心有限。",
+      "thought_process": "基本面低估值提供安全边际，新闻面微弱利好，低估值背景下业绩预期存在微弱预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "neutral",
+          "confidence": 0.5,
+          "reasoning": "数据缺失无法验证财务细节，虽行业低估值提供安全边际，但缺乏确凿证据，维持观望。neutral",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.25,
+          "reasoning": "证据不足，仅作轻微倾向。研报看好业绩增长且获资金净流入，正面因素略强于人事变动影响。（证据不足，仅作轻微倾向）",
+          "thought_process": "东吴证券研报给予'买入'评级，强调NBV高增及利润稳健，构成基本面支撑；同时该股获杠杆资金净买入，显示资金面偏好；董事辞任属常规人事变动，影响较小。综合判断多方因素略占优。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "HOLD",
+    "bull_score": 0.362,
+    "bear_score": 0.588,
+    "trend_strength": 0.23789473684210524,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "unclear",
+          "decision": "HOLD",
+          "confidence": 0.25,
+          "wrong_agent": "",
+          "reasoning": "双方置信度均低于0.5，信号强度微弱。A虽看空但警惕诱多，B看多但证据不足。技术面资金流出与基本面低估形成弱背离，缺乏明确主导逻辑，无法判定有效预期差或一方错误，建议观望。",
+          "next_action": "观察主力资金流向是否持续恶化或估值修复逻辑是否增强"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.4,
+          "bull_ratio": 0.35,
+          "bear_ratio": 0.65,
+          "reasoning": "技术面虽强但主力大额流出，量价背离显示机构派发，警惕诱多风险。",
+          "thought_process": "技术面多头与资金面流出形成背离，且数据描述存在冲突，判定为派发风险。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "股价连续攀升，收盘价逐日抬高。最新日收阳且放量，动量指标由负转正，技术面呈现多头强势特征。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "主力资金连续大额净流出，股价同步显著下跌，量价齐跌显示机构主动抛售意愿强烈，判定为出货派发。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.3,
+          "bull_ratio": 0.55,
+          "bear_ratio": 0.45,
+          "reasoning": "低估值提供安全边际，业绩增长预期形成微弱预期差，但证据不足，整体偏多但信心有限。",
+          "thought_process": "基本面低估值提供安全边际，新闻面微弱利好，低估值背景下业绩预期存在微弱预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "neutral",
+              "confidence": 0.5,
+              "reasoning": "数据缺失无法验证财务细节，虽行业低估值提供安全边际，但缺乏确凿证据，维持观望。neutral",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.25,
+              "reasoning": "证据不足，仅作轻微倾向。研报看好业绩增长且获资金净流入，正面因素略强于人事变动影响。（证据不足，仅作轻微倾向）",
+              "thought_process": "东吴证券研报给予'买入'评级，强调NBV高增及利润稳健，构成基本面支撑；同时该股获杠杆资金净买入，显示资金面偏好；董事辞任属常规人事变动，影响较小。综合判断多方因素略占优。"
+            }
+          ]
+        }
+      },
+      {
+        "round": 1,
+        "judge": {
+          "mode": "expectation_gap",
+          "decision": "HOLD",
+          "confidence": 0.55,
+          "wrong_agent": "",
+          "reasoning": "A方资金流出硬数据主导短期走势，B方低估值逻辑提供安全边际但置信度不足。资金面与基本面出现背离，短期承压但下行空间有限，维持观望。",
+          "next_action": "监控主力资金流向是否企稳"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.65,
+          "bull_ratio": 0.35,
+          "bear_ratio": 0.65,
+          "reasoning": "对方承认证据不足，无法证伪主力大额流出的硬数据。资金流出作为当前主导变量，叠加技术面诱多风险，显著压倒低估值逻辑。",
+          "thought_process": "技术面多头与资金面流出形成背离，且数据描述存在冲突，判定为派发风险。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "股价连续攀升，收盘价逐日抬高。最新日收阳且放量，动量指标由负转正，技术面呈现多头强势特征。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "主力资金连续大额净流出，股价同步显著下跌，量价齐跌显示机构主动抛售意愿强烈，判定为出货派发。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ],
+          "conceded": false
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "neutral",
+          "confidence": 0.3,
+          "bull_ratio": 0.45,
+          "bear_ratio": 0.55,
+          "reasoning": "承认资金流出压制短期情绪，但裁判HOLD判定印证低估值安全边际有效，反驳空方“显著压倒”论断。资金面与基本面背离导致方向不明，下调预期至中性，等待资金流向确认。",
+          "thought_process": "基本面低估值提供安全边际，新闻面微弱利好，低估值背景下业绩预期存在微弱预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "neutral",
+              "confidence": 0.5,
+              "reasoning": "数据缺失无法验证财务细节，虽行业低估值提供安全边际，但缺乏确凿证据，维持观望。neutral",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.25,
+              "reasoning": "证据不足，仅作轻微倾向。研报看好业绩增长且获资金净流入，正面因素略强于人事变动影响。（证据不足，仅作轻微倾向）",
+              "thought_process": "东吴证券研报给予'买入'评级，强调NBV高增及利润稳健，构成基本面支撑；同时该股获杠杆资金净买入，显示资金面偏好；董事辞任属常规人事变动，影响较小。综合判断多方因素略占优。"
+            }
+          ],
+          "conceded": false
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "第 1 轮裁判确认这是预期差机会：A方资金流出硬数据主导短期走势，B方低估值逻辑提供安全边际但置信度不足。资金面与基本面出现背离，短期承压但下行空间有限，维持观望。",
+    "position_percent": 0.0
+  },
+  "cache_hit": false,
+  "stability_score": 0.6375,
+  "stability_level": "medium",
+  "stability_note": "稳定度中等，建议结合盘中验证。",
+  "stability_diagnostics": {
+    "parse_fail_count": 3,
+    "rule_fallback_count": 0,
+    "empty_reason_count": 0,
+    "consensus_tech_fund": false,
+    "referee_action": "HOLD",
+    "risk_action": "HOLD",
+    "recommendation_action": "HOLD"
+  }
+}

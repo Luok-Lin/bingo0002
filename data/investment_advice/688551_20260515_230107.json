@@ -1,0 +1,271 @@
+{
+  "ticker": "688551",
+  "generated_at": "2026-05-15 23:01:07",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 68.69,
+    "pct_change": -0.7800086667629731,
+    "turnover": 10.491268724758822,
+    "volume": 8820084.0
+  },
+  "recommendation": {
+    "action": "SELL",
+    "execution_action": "SELL 30.6%",
+    "position_percent": 30.6,
+    "confidence": 0.9,
+    "reason": "第 2 轮后两个分析师观点达成一致：negative。 | 建议配置仓位: 30.6%",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.6,
+      "bull_ratio": 0.65,
+      "bear_ratio": 0.35,
+      "reasoning": "主力连续吸筹，技术回调属洗盘行为，回调即是低吸良机，维持看多。",
+      "thought_process": "技术面短期超买有回调需求，但主力资金逆势吸筹意图明确，资金逻辑优先级高于短期技术形态，判断为洗盘。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价短期急涨，最新K线收长上影线，抛压显现，动量指标转弱，短期面临回调压力。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：洗盘吸筹。\n\n理由：连续两日主力净流入。前一日股价微跌但资金逆势承接，呈吸筹特征；最新一日价涨量增，资金加速进场，主力做多意愿强烈。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.8,
+      "bull_ratio": 0.15,
+      "bear_ratio": 0.85,
+      "reasoning": "估值严重透支无安全边际，资金高位离场意愿强，量价背离验证派发，无正向预期差，共振看空。",
+      "thought_process": "基本面高PE严重透支，缺乏安全边际；新闻面资金持续流出且冲高回落，印证派发行为。基本面与资金面共振看空，无正向预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "PE高达113.56严重透支预期，缺乏安全边际；PB 4.39估值偏贵。数据缺失加剧不确定性，估值风险高。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "negative",
+          "confidence": 0.75,
+          "reasoning": "连续登上活跃榜伴随持续净流出，量价背离且呈现冲高回落态势，资金离场意愿强烈。",
+          "thought_process": "切片1显示688551（芯朋微）上涨7.83%但伴随巨额净流出(-4679万)，量价背离暗示主力资金借高换手离场；切片2数据虽存名称错配，但关联代码显示下跌5.60%且持续流出。综合判断为高位震荡出货，资金面偏空。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.27,
+    "bear_score": 1.53,
+    "trend_strength": 0.7,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "opponent_wrong",
+          "decision": "SELL",
+          "confidence": 0.78,
+          "wrong_agent": "分析师A",
+          "reasoning": "分析师B置信度(0.8)与空头概率(0.85)显著高于A，且结合基本面(估值透支)与技术面(派发)形成共振，逻辑更严密。分析师A仅凭技术洗盘逻辑，忽视高位估值风险与资金离场信号，属典型多头陷阱误判，故判定A错误。",
+          "next_action": "执行卖出操作"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.6,
+          "bull_ratio": 0.65,
+          "bear_ratio": 0.35,
+          "reasoning": "主力连续吸筹，技术回调属洗盘行为，回调即是低吸良机，维持看多。",
+          "thought_process": "技术面短期超买有回调需求，但主力资金逆势吸筹意图明确，资金逻辑优先级高于短期技术形态，判断为洗盘。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价短期急涨，最新K线收长上影线，抛压显现，动量指标转弱，短期面临回调压力。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：连续两日主力净流入。前一日股价微跌但资金逆势承接，呈吸筹特征；最新一日价涨量增，资金加速进场，主力做多意愿强烈。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.8,
+          "bull_ratio": 0.15,
+          "bear_ratio": 0.85,
+          "reasoning": "估值严重透支无安全边际，资金高位离场意愿强，量价背离验证派发，无正向预期差，共振看空。",
+          "thought_process": "基本面高PE严重透支，缺乏安全边际；新闻面资金持续流出且冲高回落，印证派发行为。基本面与资金面共振看空，无正向预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "PE高达113.56严重透支预期，缺乏安全边际；PB 4.39估值偏贵。数据缺失加剧不确定性，估值风险高。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "negative",
+              "confidence": 0.75,
+              "reasoning": "连续登上活跃榜伴随持续净流出，量价背离且呈现冲高回落态势，资金离场意愿强烈。",
+              "thought_process": "切片1显示688551（芯朋微）上涨7.83%但伴随巨额净流出(-4679万)，量价背离暗示主力资金借高换手离场；切片2数据虽存名称错配，但关联代码显示下跌5.60%且持续流出。综合判断为高位震荡出货，资金面偏空。"
+            }
+          ]
+        }
+      },
+      {
+        "round": 1,
+        "judge": {
+          "mode": "opponent_wrong",
+          "decision": "SELL",
+          "confidence": 0.8,
+          "wrong_agent": "分析师B",
+          "reasoning": "分析师B标签为中性但空方概率高达0.85，逻辑严重自悖，判定为明显错误。分析师A技术面判定资金派发逻辑清晰，且与B的隐含数据方向一致。市场共识偏向空头，建议卖出规避风险。",
+          "next_action": "监控主力资金流出情况及关键支撑位跌破确认"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.75,
+          "bull_ratio": 0.2,
+          "bear_ratio": 0.8,
+          "reasoning": "认可裁判判定。忽视估值透支与资金离场信号确属误判，所谓“洗盘”实为派发。修正观点，转为看空，规避高位回调风险。",
+          "thought_process": "技术面短期超买有回调需求，但主力资金逆势吸筹意图明确，资金逻辑优先级高于短期技术形态，判断为洗盘。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价短期急涨，最新K线收长上影线，抛压显现，动量指标转弱，短期面临回调压力。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：连续两日主力净流入。前一日股价微跌但资金逆势承接，呈吸筹特征；最新一日价涨量增，资金加速进场，主力做多意愿强烈。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ],
+          "conceded": true
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "neutral",
+          "confidence": 0.5,
+          "bull_ratio": 0.15,
+          "bear_ratio": 0.85,
+          "reasoning": "",
+          "thought_process": "基本面高PE严重透支，缺乏安全边际；新闻面资金持续流出且冲高回落，印证派发行为。基本面与资金面共振看空，无正向预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "PE高达113.56严重透支预期，缺乏安全边际；PB 4.39估值偏贵。数据缺失加剧不确定性，估值风险高。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "negative",
+              "confidence": 0.75,
+              "reasoning": "连续登上活跃榜伴随持续净流出，量价背离且呈现冲高回落态势，资金离场意愿强烈。",
+              "thought_process": "切片1显示688551（芯朋微）上涨7.83%但伴随巨额净流出(-4679万)，量价背离暗示主力资金借高换手离场；切片2数据虽存名称错配，但关联代码显示下跌5.60%且持续流出。综合判断为高位震荡出货，资金面偏空。"
+            }
+          ],
+          "conceded": false
+        }
+      },
+      {
+        "round": 2,
+        "judge": {
+          "mode": "opponent_wrong",
+          "decision": "SELL",
+          "confidence": 0.9,
+          "wrong_agent": "分析师B",
+          "reasoning": "分析师A与B当前方向一致均为看空。分析师B明确承认此前逻辑错误（高空率标中性）并修正方向。资金派发与市场共识明确，无预期差，判定B此前错误，执行卖出。",
+          "next_action": "结束辩论，执行交易决策"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.9,
+          "bull_ratio": 0.15,
+          "bear_ratio": 0.85,
+          "reasoning": "裁判确认派发逻辑正确，对手方数据高空率却标中性属严重逻辑错误。市场共识看空，资金离场信号明确，坚定看空，维持卖出建议。",
+          "thought_process": "技术面短期超买有回调需求，但主力资金逆势吸筹意图明确，资金逻辑优先级高于短期技术形态，判断为洗盘。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价短期急涨，最新K线收长上影线，抛压显现，动量指标转弱，短期面临回调压力。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：连续两日主力净流入。前一日股价微跌但资金逆势承接，呈吸筹特征；最新一日价涨量增，资金加速进场，主力做多意愿强烈。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ],
+          "conceded": false
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.9,
+          "bull_ratio": 0.15,
+          "bear_ratio": 0.85,
+          "reasoning": "承认逻辑错误，空方比率0.85对应中性确属自悖。裁判与对手指正合理，资金派发与市场共识均指向空头，修正方向为看空，建议卖出。",
+          "thought_process": "基本面高PE严重透支，缺乏安全边际；新闻面资金持续流出且冲高回落，印证派发行为。基本面与资金面共振看空，无正向预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "PE高达113.56严重透支预期，缺乏安全边际；PB 4.39估值偏贵。数据缺失加剧不确定性，估值风险高。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "negative",
+              "confidence": 0.75,
+              "reasoning": "连续登上活跃榜伴随持续净流出，量价背离且呈现冲高回落态势，资金离场意愿强烈。",
+              "thought_process": "切片1显示688551（芯朋微）上涨7.83%但伴随巨额净流出(-4679万)，量价背离暗示主力资金借高换手离场；切片2数据虽存名称错配，但关联代码显示下跌5.60%且持续流出。综合判断为高位震荡出货，资金面偏空。"
+            }
+          ],
+          "conceded": true
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "SELL",
+    "reason": "第 2 轮后两个分析师观点达成一致：negative。 | 建议配置仓位: 30.6%",
+    "position_percent": 30.6
+  }
+}

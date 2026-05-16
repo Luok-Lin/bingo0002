@@ -1,0 +1,212 @@
+{
+  "ticker": "600381",
+  "backtest_limit": 22,
+  "auto_tune_enabled": false,
+  "total_days": 22,
+  "total_trades": 17,
+  "avg_real_pnl": 3.084458040003732,
+  "avg_effective_pnl": -0.28197709490937256,
+  "win_rate": 0.36363636363636365,
+  "start_date": "2026-04-09",
+  "end_date": "2026-05-13",
+  "rows": [
+    {
+      "date": "2026-04-09",
+      "next_date": "2026-04-10",
+      "decision": "BUY 7.92%",
+      "action": "BUY",
+      "position": 0.07919999999999999,
+      "real_pnl": 4.942965779467677,
+      "effective_pnl": 0.39148288973384
+    },
+    {
+      "date": "2026-04-10",
+      "next_date": "2026-04-13",
+      "decision": "BUY 15.0%",
+      "action": "BUY",
+      "position": 0.15,
+      "real_pnl": 5.072463768115947,
+      "effective_pnl": 0.760869565217392
+    },
+    {
+      "date": "2026-04-13",
+      "next_date": "2026-04-14",
+      "decision": "BUY 15.0%",
+      "action": "BUY",
+      "position": 0.15,
+      "real_pnl": 5.172413793103446,
+      "effective_pnl": 0.7758620689655168
+    },
+    {
+      "date": "2026-04-14",
+      "next_date": "2026-04-15",
+      "decision": "BUY 85.11%",
+      "action": "BUY",
+      "position": 0.8511,
+      "real_pnl": -2.2950819672131098,
+      "effective_pnl": -1.9533442622950776
+    },
+    {
+      "date": "2026-04-15",
+      "next_date": "2026-04-16",
+      "decision": "BUY 15.0%",
+      "action": "BUY",
+      "position": 0.15,
+      "real_pnl": -1.6778523489932826,
+      "effective_pnl": -0.25167785234899237
+    },
+    {
+      "date": "2026-04-16",
+      "next_date": "2026-04-17",
+      "decision": "BUY 10.12%",
+      "action": "BUY",
+      "position": 0.1012,
+      "real_pnl": -4.095563139931744,
+      "effective_pnl": -0.4144709897610925
+    },
+    {
+      "date": "2026-04-17",
+      "next_date": "2026-04-20",
+      "decision": "BUY 13.65%",
+      "action": "BUY",
+      "position": 0.1365,
+      "real_pnl": 4.982206405693955,
+      "effective_pnl": 0.6800711743772249
+    },
+    {
+      "date": "2026-04-20",
+      "next_date": "2026-04-21",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 5.0847457627118615,
+      "effective_pnl": 0.0
+    },
+    {
+      "date": "2026-04-21",
+      "next_date": "2026-04-22",
+      "decision": "BUY 26.71%",
+      "action": "BUY",
+      "position": 0.2671,
+      "real_pnl": 4.838709677419352,
+      "effective_pnl": 1.292419354838709
+    },
+    {
+      "date": "2026-04-22",
+      "next_date": "2026-04-23",
+      "decision": "BUY 33.39%",
+      "action": "BUY",
+      "position": 0.33390000000000003,
+      "real_pnl": 4.923076923076927,
+      "effective_pnl": 1.643815384615386
+    },
+    {
+      "date": "2026-04-23",
+      "next_date": "2026-04-24",
+      "decision": "BUY 40.93%",
+      "action": "BUY",
+      "position": 0.4093,
+      "real_pnl": -4.398826979472151,
+      "effective_pnl": -1.8004398826979515
+    },
+    {
+      "date": "2026-04-24",
+      "next_date": "2026-04-27",
+      "decision": "BUY 37.76%",
+      "action": "BUY",
+      "position": 0.3776,
+      "real_pnl": -4.907975460122691,
+      "effective_pnl": -1.8532515337423279
+    },
+    {
+      "date": "2026-04-27",
+      "next_date": "2026-04-28",
+      "decision": "SELL 11.21%",
+      "action": "SELL",
+      "position": 0.1121,
+      "real_pnl": 5.161290322580635,
+      "effective_pnl": -0.5785806451612893
+    },
+    {
+      "date": "2026-04-28",
+      "next_date": "2026-04-29",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 4.907975460122705,
+      "effective_pnl": 0.0
+    },
+    {
+      "date": "2026-04-29",
+      "next_date": "2026-04-30",
+      "decision": "SELL 38.17%",
+      "action": "SELL",
+      "position": 0.38170000000000004,
+      "real_pnl": 4.970760233918127,
+      "effective_pnl": -1.8973391812865492
+    },
+    {
+      "date": "2026-04-30",
+      "next_date": "2026-05-06",
+      "decision": "BUY 14.43%",
+      "action": "BUY",
+      "position": 0.14429999999999998,
+      "real_pnl": 5.013927576601676,
+      "effective_pnl": 0.7235097493036218
+    },
+    {
+      "date": "2026-05-06",
+      "next_date": "2026-05-07",
+      "decision": "BUY 10.78%",
+      "action": "BUY",
+      "position": 0.10779999999999999,
+      "real_pnl": 5.0397877984084865,
+      "effective_pnl": 0.5432891246684348
+    },
+    {
+      "date": "2026-05-07",
+      "next_date": "2026-05-08",
+      "decision": "SELL 46.8%",
+      "action": "SELL",
+      "position": 0.46799999999999997,
+      "real_pnl": 5.0505050505050555,
+      "effective_pnl": -2.363636363636366
+    },
+    {
+      "date": "2026-05-08",
+      "next_date": "2026-05-11",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 5.048076923076922,
+      "effective_pnl": 0.0
+    },
+    {
+      "date": "2026-05-11",
+      "next_date": "2026-05-12",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 5.0343249427917565,
+      "effective_pnl": 0.0
+    },
+    {
+      "date": "2026-05-12",
+      "next_date": "2026-05-13",
+      "decision": "HOLD",
+      "action": "HOLD",
+      "position": 1.0,
+      "real_pnl": 5.010893246187374,
+      "effective_pnl": 0.0
+    },
+    {
+      "date": "2026-05-13",
+      "next_date": "2026-05-14",
+      "decision": "SELL 38.2%",
+      "action": "SELL",
+      "position": 0.382,
+      "real_pnl": 4.979253112033181,
+      "effective_pnl": -1.902074688796675
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "ticker": "603156",
+  "generated_at": "2026-05-16 04:47:02",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 46.78,
+    "pct_change": -1.1620536657511034,
+    "turnover": 1.4205945962224642,
+    "volume": 17903435.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.5,
+    "reason": "技术面破位与基本面高估形成双重压制，资金逆势吸筹虽存短期博弈逻辑，但难以扭转基本面颓势。多空观点在不同维度成立，当前并非安全买入机会，建议观望。",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.55,
+      "bull_ratio": 0.6,
+      "bear_ratio": 0.4,
+      "reasoning": "技术破位虽弱，但主力巨资逆势吸筹，量价背离明显，洗盘特征显著，后市看反弹修复。",
+      "thought_process": "技术面破位引发恐慌，但主力资金逆势大额流入，验证洗盘逻辑，资金意愿优先级高于短期K线形态。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价短期暴涨后高位放量回落，最新K线收阴且下探破位，短期技术面面临调整压力。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：**洗盘吸筹**。\n\n理由：股价微涨但主力巨资流入，量价背离明显。大额净流入覆盖前日流出，主力压盘吸筹意愿强烈，非出货特征。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.55,
+      "bull_ratio": 0.35,
+      "bear_ratio": 0.65,
+      "reasoning": "估值显著高估透支预期，业绩增长质量存疑，预期差偏向负面，建议偏空看待。",
+      "thought_process": "估值高估（置信度0.5）权重高于业绩利好（置信度0.3）。高PE已透支预期，业绩增长伴随现金流为负，存在预期差向下的风险。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "行业属成熟期，平均PE较低。当前PE（41.36）与PB（5.95）显著高估，缺乏安全边际，透支未来预期。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.3,
+          "reasoning": "证据不足，仅作轻微倾向：一季报业绩高增且获券商看好，提振市场预期，但现金流为负及上年业绩下滑限制信心，整体呈轻微向好态势。（证据不足，仅作轻微倾向）",
+          "thought_process": "2026年一季报显示营收与净利润双增长，且增速较高，获券商“增持”评级并称业绩超预期；但2025年年报业绩下滑及一季报经营性现金流净流出构成隐患。综合来看，短期业绩修复的正面信号略占上风。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "HOLD",
+    "bull_score": 0.522,
+    "bear_score": 0.578,
+    "trend_strength": 0.05090909090909085,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "expectation_gap",
+          "decision": "HOLD",
+          "confidence": 0.5,
+          "wrong_agent": "",
+          "reasoning": "技术面破位与基本面高估形成双重压制，资金逆势吸筹虽存短期博弈逻辑，但难以扭转基本面颓势。多空观点在不同维度成立，当前并非安全买入机会，建议观望。",
+          "next_action": "关注主力资金是否持续流入及股价是否收复关键技术位。"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.55,
+          "bull_ratio": 0.6,
+          "bear_ratio": 0.4,
+          "reasoning": "技术破位虽弱，但主力巨资逆势吸筹，量价背离明显，洗盘特征显著，后市看反弹修复。",
+          "thought_process": "技术面破位引发恐慌，但主力资金逆势大额流入，验证洗盘逻辑，资金意愿优先级高于短期K线形态。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "股价短期暴涨后高位放量回落，最新K线收阴且下探破位，短期技术面面临调整压力。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：**洗盘吸筹**。\n\n理由：股价微涨但主力巨资流入，量价背离明显。大额净流入覆盖前日流出，主力压盘吸筹意愿强烈，非出货特征。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.55,
+          "bull_ratio": 0.35,
+          "bear_ratio": 0.65,
+          "reasoning": "估值显著高估透支预期，业绩增长质量存疑，预期差偏向负面，建议偏空看待。",
+          "thought_process": "估值高估（置信度0.5）权重高于业绩利好（置信度0.3）。高PE已透支预期，业绩增长伴随现金流为负，存在预期差向下的风险。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "行业属成熟期，平均PE较低。当前PE（41.36）与PB（5.95）显著高估，缺乏安全边际，透支未来预期。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.3,
+              "reasoning": "证据不足，仅作轻微倾向：一季报业绩高增且获券商看好，提振市场预期，但现金流为负及上年业绩下滑限制信心，整体呈轻微向好态势。（证据不足，仅作轻微倾向）",
+              "thought_process": "2026年一季报显示营收与净利润双增长，且增速较高，获券商“增持”评级并称业绩超预期；但2025年年报业绩下滑及一季报经营性现金流净流出构成隐患。综合来看，短期业绩修复的正面信号略占上风。"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "技术面破位与基本面高估形成双重压制，资金逆势吸筹虽存短期博弈逻辑，但难以扭转基本面颓势。多空观点在不同维度成立，当前并非安全买入机会，建议观望。",
+    "position_percent": 0.0
+  }
+}

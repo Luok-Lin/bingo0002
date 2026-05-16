@@ -1,0 +1,159 @@
+{
+  "ticker": "603156",
+  "generated_at": "2026-05-16 18:09:26",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 46.78,
+    "pct_change": -1.1620536657511034,
+    "turnover": 1.4205945962224642,
+    "volume": 17903435.0
+  },
+  "recommendation": {
+    "action": "BUY",
+    "execution_action": "BUY 15.0%",
+    "position_percent": 15.0,
+    "confidence": 0.68,
+    "reason": "技术资金面高置信度(0.70)与基本面低置信度(0.48)形成预期差。主力资金大幅流入驱动短期价格，基本面估值压力尚未在盘面兑现。短期动能强于基本面担忧，判定为资金驱动的买入机会。 | 建议配置仓位: 15.0%",
+    "next_action": "按裁判裁决进入风控执行。",
+    "stability_note": "稳定度中等，建议结合盘中验证。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.7,
+      "bull_ratio": 0.75,
+      "bear_ratio": 0.25,
+      "reasoning": "技术面升势确立配合主力资金大幅净流入，洗盘后有望继续上行，共振看多。",
+      "thought_process": "技术面放量确立升势，资金面两日合计净流入近亿且洗盘迹象明显，量价共振，多头合力强劲。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "股价近期放量大涨确立升势，随后高位震荡换手，量能维持活跃，短期多头趋势保持完好。\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：洗盘吸筹。\n\n理由：首日主力大幅净流入1.2亿且股价企稳，次日股价回调但流出仅两千万。两日合计净流入近亿，主力借势洗盘吸筹迹象明显。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.48,
+      "bull_ratio": 0.35,
+      "bear_ratio": 0.65,
+      "reasoning": "估值显著偏高缺乏安全边际，Q1利好证据不足且经营现金流为负，预期差偏负面，建议规避。",
+      "thought_process": "估值高企是核心约束，利好消息置信度低且含现金流隐忧，无法支撑高估值，风险收益比不佳。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "PE 41倍显著高于行业均值，PB近6倍估值偏高，缺乏安全边际，基本面估值承压。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.28,
+          "reasoning": "Q1业绩超预期获券商增持评级，资金流入且股价创新高，但经营现金流为负，证据不足，仅作轻微倾向。（证据不足，仅作轻微倾向）",
+          "thought_process": "Q1净利润表现良好且超预期，券商给予增持评级，资金呈净流入且股价创新高，虽经营现金流为负，但多方利好因素略占上风。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "BUY",
+    "bull_score": 0.693,
+    "bear_score": 0.487,
+    "trend_strength": 0.17457627118644065,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "expectation_gap",
+          "decision": "BUY",
+          "confidence": 0.68,
+          "wrong_agent": "",
+          "reasoning": "技术资金面高置信度(0.70)与基本面低置信度(0.48)形成预期差。主力资金大幅流入驱动短期价格，基本面估值压力尚未在盘面兑现。短期动能强于基本面担忧，判定为资金驱动的买入机会。",
+          "next_action": "监控主力资金流向持续性及成交量变化"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.7,
+          "bull_ratio": 0.75,
+          "bear_ratio": 0.25,
+          "reasoning": "技术面升势确立配合主力资金大幅净流入，洗盘后有望继续上行，共振看多。",
+          "thought_process": "技术面放量确立升势，资金面两日合计净流入近亿且洗盘迹象明显，量价共振，多头合力强劲。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "股价近期放量大涨确立升势，随后高位震荡换手，量能维持活跃，短期多头趋势保持完好。\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：首日主力大幅净流入1.2亿且股价企稳，次日股价回调但流出仅两千万。两日合计净流入近亿，主力借势洗盘吸筹迹象明显。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "negative",
+          "confidence": 0.48,
+          "bull_ratio": 0.35,
+          "bear_ratio": 0.65,
+          "reasoning": "估值显著偏高缺乏安全边际，Q1利好证据不足且经营现金流为负，预期差偏负面，建议规避。",
+          "thought_process": "估值高企是核心约束，利好消息置信度低且含现金流隐忧，无法支撑高估值，风险收益比不佳。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "PE 41倍显著高于行业均值，PB近6倍估值偏高，缺乏安全边际，基本面估值承压。\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.28,
+              "reasoning": "Q1业绩超预期获券商增持评级，资金流入且股价创新高，但经营现金流为负，证据不足，仅作轻微倾向。（证据不足，仅作轻微倾向）",
+              "thought_process": "Q1净利润表现良好且超预期，券商给予增持评级，资金呈净流入且股价创新高，虽经营现金流为负，但多方利好因素略占上风。"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "BUY",
+    "reason": "技术资金面高置信度(0.70)与基本面低置信度(0.48)形成预期差。主力资金大幅流入驱动短期价格，基本面估值压力尚未在盘面兑现。短期动能强于基本面担忧，判定为资金驱动的买入机会。 | 建议配置仓位: 15.0%",
+    "position_percent": 15.0
+  },
+  "cache_hit": false,
+  "stability_score": 0.718,
+  "stability_level": "medium",
+  "stability_note": "稳定度中等，建议结合盘中验证。",
+  "stability_diagnostics": {
+    "parse_fail_count": 3,
+    "rule_fallback_count": 0,
+    "empty_reason_count": 0,
+    "consensus_tech_fund": false,
+    "referee_action": "BUY",
+    "risk_action": "BUY",
+    "recommendation_action": "BUY"
+  }
+}

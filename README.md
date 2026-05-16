@@ -143,3 +143,46 @@ TradingAgents_RAG_DL/
 1. **更换大模型与接口**: 你可以在修改 `.env` 文件的同时，在对应配置处将 `base_url` 改为国内大模型（例如智谱、Moonshot、Deepseek）的中转接口进行低成本测试。
 2. **修改 RAG 数据库源**: 将你关注的证券研报放入本地目录，并在 `rag/retriever.py` 中引入对应的 PDF/TXT 文本解析器重新建立 ChromaDB 向量本地库。
 3. **结合强化学习 (RL)**: 在 `main.py` 的架构预留层，引入 `Stable-Baselines3` 或 `FinRL` 将当前策略验证与真实的 PPO/DQN 算法对接。
+
+---
+
+## Web 版投研系统（前后端分离）
+
+本仓库已新增前后端分离版本：
+
+- 后端 API：`backend/app.py`（FastAPI）
+- 前端页面：`frontend/index.html`（独立静态前端）
+
+### 1) 启动后端 API
+
+在项目根目录执行：
+
+```bash
+uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+主要接口：
+
+- `POST /api/train/init`：初始化训练（前十股票回测一个月）
+- `POST /api/advice/run`：生成结构化投资建议
+- `GET /api/agent-trace/{ticker}`：获取多Agent思考链路
+- `POST /api/evolution/run`：手动触发自进化
+- `GET /api/dashboard/summary`：总览数据
+- `GET /api/tasks`：任务状态
+
+### 2) 打开前端
+
+前端是独立静态页面，建议在 `frontend/` 目录启动一个静态服务器：
+
+```bash
+cd frontend
+python -m http.server 5173
+```
+
+然后浏览器打开：`http://127.0.0.1:5173`
+
+默认 API 地址是：`http://127.0.0.1:8000`
+
+### 3) 每日自进化
+
+后端内置每日自动任务（默认每天 `18:30`），执行“经验增量更新”流程；同时保留手动触发接口，支持补跑与重试。

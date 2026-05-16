@@ -1,0 +1,83 @@
+{
+  "ticker": "600381",
+  "generated_at": "2026-05-16 01:40:28",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 5.31,
+    "pct_change": 4.940711462450594,
+    "turnover": 7.739291324881832,
+    "volume": 45434341.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.675,
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.8,
+      "bull_ratio": 0.1,
+      "bear_ratio": 0.9,
+      "reasoning": "技术与资金双重验证高位出货，炸板巨量且资金大幅流出，短期见顶回落风险极高。",
+      "thought_process": "技术面炸板巨量与资金面巨额流出形成强烈共振，双重验证主力高位派发意图，风险信号明确。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "前期连续涨停，今日高开低走放出巨量，呈现典型的炸板出货特征，短期见顶风险大。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "判断：**出货派发**。\n\n理由：股价连续上涨，但次日出现巨额主力净流出，流出规模远超前日流入。价升资出，典型的诱多出货特征。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.55,
+      "bull_ratio": 0.2,
+      "bear_ratio": 0.8,
+      "reasoning": "业绩亏损叠加估值虚高，基本面恶化确立，无预期差，建议回避。",
+      "thought_process": "基本面负PE显示亏损，PB 3.18估值偏高无安全边际；新闻确认年报亏损，验证经营压力。两维度信号共振向下，无预期差，风险显著大于机会。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "negative\n\n负PE显示亏损，基本面恶化；PB 3.18估值偏高，无安全边际。数据缺失加剧不确定性，投资风险极大。",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "negative",
+          "confidence": 0.25,
+          "reasoning": "证据不足，仅作轻微倾向。年报显示净利润亏损3732.04万元，基本面表现疲软，存在经营压力。（证据不足，仅作轻微倾向）",
+          "thought_process": "切片显示公司2025年净利润亏损3732.04万元，基本面疲软；切片一成交量数据截断无法作为有效支撑，主要依据净利润亏损判定为轻微负面。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.19,
+    "bear_score": 1.16,
+    "trend_strength": 0.7185185185185186,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "position_percent": 0.0
+  }
+}

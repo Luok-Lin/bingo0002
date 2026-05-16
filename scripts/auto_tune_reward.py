@@ -36,6 +36,7 @@ DEFAULT_CONFIG_PATH = os.path.join(BASE_DIR, "rl", "reward_config.json")
 @dataclass
 class EvaluationResult:
     score: float
+    validation_score: float | None
     total_reward: float
     avg_reward: float
     reward_std: float
@@ -46,6 +47,14 @@ class EvaluationResult:
     trade_count: int
     buy_sell_count: int
     hold_count: int
+    trade_rate: float
+    avg_trade_reward: float
+    avg_hold_reward: float
+    cumulative_effective_pnl: float
+    avg_effective_pnl: float
+    directional_accuracy: float
+    missed_opportunity_rate: float
+    manual_feedback_count: int
     rewards: list[float]
 
 
@@ -61,6 +70,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--optuna-trials", type=int, default=0, help="Use Optuna if available; specify number of trials")
     parser.add_argument("--optuna-study-name", default="reward_tuning", help="Optuna study name")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--validation-ratio", type=float, default=0.3, help="Hold out the latest ratio of records for validation")
     parser.add_argument("--dry-run", action="store_true", help="Do not write tuned config to disk")
     return parser.parse_args()
 
@@ -87,7 +97,10 @@ def _normalize_decision(record: dict) -> tuple[str, float]:
     else:
         action = "HOLD"
 
-    position = 1.0
+    position = float(record.get("position", record.get("position_percent", 1.0)) or 1.0)
+    if position > 1.0:
+        position = position / 100.0
+    position = max(0.0, min(1.0, position))
     for token in [raw.replace("BUY", ""), raw.replace("SELL", "")]:
         token = token.replace("%", "").strip()
         if token:
@@ -98,6 +111,23 @@ def _normalize_decision(record: dict) -> tuple[str, float]:
                 continue
 
     return action, position
+
+
+def _market_move_percent(record: dict) -> float:
+    for key in ("market_move_percent", "real_pnl", "market_pnl_percent"):
+        if key in record and record.get(key) is not None:
+            return float(record.get(key) or 0.0)
+    return float(record.get("pnl_percent", 0.0) or 0.0)
+
+
+def _actual_pnl_percent(record: dict, action: str, position: float, market_move_percent: float) -> float:
+    if "pnl_percent" in record and record.get("pnl_percent") is not None:
+        return float(record.get("pnl_percent") or 0.0)
+    if action == "BUY":
+        return market_move_percent * position
+    if action == "SELL":
+        return -market_move_percent * position
+    return 0.0
 
 
 def _max_drawdown_from_rewards(rewards: list[float]) -> float:
@@ -112,35 +142,77 @@ def _max_drawdown_from_rewards(rewards: list[float]) -> float:
     return max_drawdown
 
 
+def _max_drawdown_from_pnls(pnls: list[float]) -> float:
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    for pnl in pnls:
+        equity *= max(0.01, 1.0 + float(pnl) / 100.0)
+        peak = max(peak, equity)
+        drawdown = (peak - equity) / peak if peak else 0.0
+        max_drawdown = max(max_drawdown, drawdown)
+    return max_drawdown
+
+
 def _evaluate_config(records: list[dict], config: dict) -> EvaluationResult:
     historical_pnls: list[float] = []
+    recent_actions_by_ticker: dict[str, list[str]] = {}
     rewards: list[float] = []
+    trade_rewards: list[float] = []
+    hold_rewards: list[float] = []
+    effective_pnls: list[float] = []
     positive_rewards = []
     negative_rewards = []
     buy_sell_count = 0
     hold_count = 0
+    correct_direction_count = 0
+    directional_sample_count = 0
+    missed_opportunity_count = 0
+    hold_opportunity_count = 0
+    manual_feedback_count = 0
 
     for record in records:
-        pnl_percent = float(record.get("pnl_percent", 0.0) or 0.0)
         action, position = _normalize_decision(record)
+        market_move_percent = _market_move_percent(record)
+        actual_pnl_percent = _actual_pnl_percent(record, action, position, market_move_percent)
+        ticker = str(record.get("ticker", "__GLOBAL__") or "__GLOBAL__")
+        recent_actions = recent_actions_by_ticker.setdefault(ticker, [])
+        reflection_text = str(record.get("reflection_text", "") or "")
+
+        if "人工" in reflection_text or str(record.get("role", "")).lower() == "human":
+            manual_feedback_count += 1
 
         if action in {"BUY", "SELL"}:
             buy_sell_count += 1
+            if abs(market_move_percent) > 0:
+                directional_sample_count += 1
+                if (action == "BUY" and market_move_percent > 0) or (action == "SELL" and market_move_percent < 0):
+                    correct_direction_count += 1
         else:
             hold_count += 1
+            if abs(market_move_percent) >= 0.5:
+                hold_opportunity_count += 1
+                missed_opportunity_count += 1
 
         breakdown = compute_trade_reward(
             action=action,
-            actual_pnl_percent=pnl_percent if action != "SELL" else -pnl_percent,
-            market_move_percent=pnl_percent,
+            actual_pnl_percent=actual_pnl_percent,
+            market_move_percent=market_move_percent,
             historical_pnls=historical_pnls,
+            recent_actions=recent_actions,
             position=position,
             config=config,
         )
 
         reward = float(breakdown.reward)
         rewards.append(reward)
-        historical_pnls.append(pnl_percent)
+        historical_pnls.append(actual_pnl_percent)
+        recent_actions.append(action)
+        effective_pnls.append(actual_pnl_percent)
+        if action in {"BUY", "SELL"}:
+            trade_rewards.append(reward)
+        else:
+            hold_rewards.append(reward)
 
         if reward > 0:
             positive_rewards.append(reward)
@@ -154,22 +226,38 @@ def _evaluate_config(records: list[dict], config: dict) -> EvaluationResult:
     avg_positive_reward = mean(positive_rewards) if positive_rewards else 0.0
     avg_negative_reward = mean(negative_rewards) if negative_rewards else 0.0
     max_drawdown = _max_drawdown_from_rewards(rewards)
+    pnl_drawdown = _max_drawdown_from_pnls(effective_pnls)
+    trade_rate = buy_sell_count / trade_count if trade_count else 0.0
+    avg_trade_reward = mean(trade_rewards) if trade_rewards else 0.0
+    avg_hold_reward = mean(hold_rewards) if hold_rewards else 0.0
+    cumulative_effective_pnl = sum(effective_pnls)
+    avg_effective_pnl = mean(effective_pnls) if effective_pnls else 0.0
+    directional_accuracy = correct_direction_count / directional_sample_count if directional_sample_count else 0.0
+    missed_opportunity_rate = missed_opportunity_count / hold_opportunity_count if hold_opportunity_count else 0.0
 
-    # 目标函数：更偏向稳定的正 reward，同时压制波动和回撤
+    # 目标函数：同时优化 reward、真实有效收益、方向正确率，并压制长期 HOLD 与错过机会。
     score = (
-        avg_reward * 2.0
-        + win_rate * 1.5
+        avg_reward * 1.4
+        + win_rate * 0.8
+        + avg_effective_pnl * 0.18
+        + cumulative_effective_pnl * 0.015
+        + directional_accuracy * 1.1
+        + trade_rate * 0.45
         + avg_positive_reward * 0.5
+        + avg_trade_reward * 0.35
         + avg_negative_reward * 0.75  # negative 为负数，所以会惩罚
-        - reward_std * 1.2
-        - max_drawdown * 2.5
+        - reward_std * 1.0
+        - max_drawdown * 1.8
+        - pnl_drawdown * 2.0
+        - missed_opportunity_rate * 1.2
     )
 
-    score += math.log1p(max(0, buy_sell_count)) * 0.1
-    score -= hold_count * 0.002
+    score += math.log1p(max(0, buy_sell_count)) * 0.08
+    score -= hold_count * 0.004
 
     return EvaluationResult(
         score=score,
+        validation_score=None,
         total_reward=sum(rewards),
         avg_reward=avg_reward,
         reward_std=reward_std,
@@ -180,6 +268,14 @@ def _evaluate_config(records: list[dict], config: dict) -> EvaluationResult:
         trade_count=trade_count,
         buy_sell_count=buy_sell_count,
         hold_count=hold_count,
+        trade_rate=trade_rate,
+        avg_trade_reward=avg_trade_reward,
+        avg_hold_reward=avg_hold_reward,
+        cumulative_effective_pnl=cumulative_effective_pnl,
+        avg_effective_pnl=avg_effective_pnl,
+        directional_accuracy=directional_accuracy,
+        missed_opportunity_rate=missed_opportunity_rate,
+        manual_feedback_count=manual_feedback_count,
         rewards=rewards,
     )
 
@@ -193,7 +289,9 @@ def _grid_candidates(base: dict) -> list[dict]:
         "turnover_penalty_base": [0.85, 1.0, 1.15],
         "exposure_penalty_weight": [0.85, 1.0, 1.15],
         "loss_streak_penalty_weight": [0.75, 1.0, 1.25],
-        "hold_penalty_weight": [0.8, 1.0, 1.2],
+        "hold_penalty_weight": [0.9, 1.0, 1.2],
+        "hold_streak_penalty_weight": [0.8, 1.0, 1.3],
+        "correct_direction_reward_multiplier": [1.0, 1.2, 1.5],
     }
 
     keys = list(axes.keys())
@@ -218,7 +316,9 @@ def _suggest_candidate_from_trial(trial, base: dict) -> dict:
     candidate["turnover_penalty_position_weight"] = trial.suggest_float("turnover_penalty_position_weight", 0.02, 0.07)
     candidate["exposure_penalty_weight"] = trial.suggest_float("exposure_penalty_weight", 0.01, 0.06)
     candidate["loss_streak_penalty_weight"] = trial.suggest_float("loss_streak_penalty_weight", 0.06, 0.22)
-    candidate["hold_penalty_weight"] = trial.suggest_float("hold_penalty_weight", 0.02, 0.10)
+    candidate["hold_penalty_weight"] = trial.suggest_float("hold_penalty_weight", 0.08, 0.22)
+    candidate["hold_streak_penalty_weight"] = trial.suggest_float("hold_streak_penalty_weight", 0.02, 0.10)
+    candidate["correct_direction_reward_multiplier"] = trial.suggest_float("correct_direction_reward_multiplier", 1.0, 1.8)
     return candidate
 
 
@@ -260,6 +360,8 @@ def _random_candidates(base: dict, samples: int, seed: int) -> list[dict]:
             "exposure_penalty_weight",
             "loss_streak_penalty_weight",
             "hold_penalty_weight",
+            "hold_streak_penalty_weight",
+            "correct_direction_reward_multiplier",
         ]:
             jitter = rng.uniform(0.82, 1.18)
             candidate[key] = round(float(candidate[key]) * jitter, 6)
@@ -268,11 +370,43 @@ def _random_candidates(base: dict, samples: int, seed: int) -> list[dict]:
 
 
 def _format_metric_line(name: str, value: float) -> str:
-    if name in {"score", "total_reward", "avg_reward", "reward_std", "avg_positive_reward", "avg_negative_reward", "max_drawdown"}:
+    if value is None:
+        return f"{name}=N/A"
+    if name in {
+        "score",
+        "validation_score",
+        "total_reward",
+        "avg_reward",
+        "reward_std",
+        "avg_positive_reward",
+        "avg_negative_reward",
+        "max_drawdown",
+        "avg_trade_reward",
+        "avg_hold_reward",
+        "cumulative_effective_pnl",
+        "avg_effective_pnl",
+    }:
         return f"{name}={value:.6f}"
-    if name == "win_rate":
+    if name in {"win_rate", "trade_rate", "directional_accuracy", "missed_opportunity_rate"}:
         return f"{name}={value:.2%}"
     return f"{name}={value}"
+
+
+def _split_train_validation(records: list[dict], validation_ratio: float) -> tuple[list[dict], list[dict]]:
+    if len(records) < 10 or validation_ratio <= 0:
+        return records, []
+
+    ratio = max(0.05, min(0.5, validation_ratio))
+    validation_size = max(1, int(len(records) * ratio))
+    if validation_size >= len(records):
+        validation_size = max(1, len(records) // 3)
+    split_idx = len(records) - validation_size
+    return records[:split_idx], records[split_idx:]
+
+
+def _with_validation_score(result: EvaluationResult, validation_score: float | None) -> EvaluationResult:
+    result.validation_score = validation_score
+    return result
 
 
 def _write_config(path: str, config: dict) -> None:
@@ -297,9 +431,23 @@ def _build_report_dir(report_dir: str | None) -> str:
 
 
 def _plot_metric_comparison(report_dir: str, baseline: EvaluationResult, best: EvaluationResult) -> str:
-    metrics = ["score", "avg_reward", "win_rate", "reward_std", "max_drawdown"]
-    baseline_values = [baseline.score, baseline.avg_reward, baseline.win_rate, baseline.reward_std, baseline.max_drawdown]
-    best_values = [best.score, best.avg_reward, best.win_rate, best.reward_std, best.max_drawdown]
+    metrics = ["score", "avg_reward", "trade_rate", "directional_accuracy", "avg_effective_pnl", "max_drawdown"]
+    baseline_values = [
+        baseline.score,
+        baseline.avg_reward,
+        baseline.trade_rate,
+        baseline.directional_accuracy,
+        baseline.avg_effective_pnl,
+        baseline.max_drawdown,
+    ]
+    best_values = [
+        best.score,
+        best.avg_reward,
+        best.trade_rate,
+        best.directional_accuracy,
+        best.avg_effective_pnl,
+        best.max_drawdown,
+    ]
 
     fig, ax = plt.subplots(figsize=(10, 5))
     x = list(range(len(metrics)))
@@ -367,6 +515,8 @@ def _plot_config_changes(report_dir: str, baseline: dict, best: dict) -> str:
         "exposure_penalty_weight",
         "loss_streak_penalty_weight",
         "hold_penalty_weight",
+        "hold_streak_penalty_weight",
+        "correct_direction_reward_multiplier",
     ]
     deltas = []
     labels = []
@@ -401,20 +551,29 @@ def main() -> None:
     records = _load_records(args.log_path)
     if args.window and args.window > 0:
         records = records[-args.window :]
+    train_records, validation_records = _split_train_validation(records, args.validation_ratio)
 
     baseline = load_reward_config(args.config_path)
-    baseline_result = _evaluate_config(records, baseline)
+    baseline_result = _evaluate_config(train_records, baseline)
+    baseline_validation_result = _evaluate_config(validation_records, baseline) if validation_records else None
+    _with_validation_score(
+        baseline_result,
+        baseline_validation_result.score if baseline_validation_result else None,
+    )
 
     informative_trade_count = sum(1 for record in records if str(record.get("decision", "HOLD") or "HOLD").upper().startswith(("BUY", "SELL")))
     if informative_trade_count == 0:
         print("⚠️ 当前回测窗口里几乎没有 BUY/SELL 记录，reward 搜索很难产生区分度；建议换成有真实交易的回测日志再调参。")
+    market_move_count = sum(1 for record in records if any(key in record for key in ("market_move_percent", "real_pnl", "market_pnl_percent")))
+    if market_move_count == 0:
+        print("⚠️ 当前日志缺少 market_move_percent/real_pnl，HOLD 错过机会率只能在未来新日志中准确评估。")
 
     if args.grid:
         candidates = _grid_candidates(baseline)
         optimizer_name = "grid"
         optuna_best_params = None
     elif args.optuna_trials and args.optuna_trials > 0 and optuna is not None:
-        candidates, _, optuna_best_params = _optuna_candidates(baseline, records, args.optuna_trials, args.seed, args.optuna_study_name)
+        candidates, _, optuna_best_params = _optuna_candidates(baseline, train_records, args.optuna_trials, args.seed, args.optuna_study_name)
         optimizer_name = "optuna"
     elif args.optuna_trials and args.optuna_trials > 0 and optuna is None:
         print("⚠️ 检测到 --optuna-trials 但当前环境未安装 optuna，将自动回退到随机搜索。")
@@ -428,14 +587,30 @@ def main() -> None:
 
     best_config = baseline
     best_result = baseline_result
+    best_validation_result = baseline_validation_result
     candidate_results: list[EvaluationResult] = []
+    baseline_selection_score = (
+        baseline_validation_result.score * 0.7 + baseline_result.score * 0.3
+        if baseline_validation_result
+        else baseline_result.score
+    )
+    best_selection_score = baseline_selection_score
 
     for idx, candidate in enumerate(candidates, start=1):
-        result = _evaluate_config(records, candidate)
+        result = _evaluate_config(train_records, candidate)
+        validation_result = _evaluate_config(validation_records, candidate) if validation_records else None
+        _with_validation_score(result, validation_result.score if validation_result else None)
         candidate_results.append(result)
-        if result.score > best_result.score:
+        selection_score = (
+            validation_result.score * 0.7 + result.score * 0.3
+            if validation_result
+            else result.score
+        )
+        if selection_score > best_selection_score:
             best_config = candidate
             best_result = result
+            best_validation_result = validation_result
+            best_selection_score = selection_score
 
     output_path = args.output_path or args.config_path
     report_dir = _build_report_dir(args.report_dir)
@@ -443,17 +618,52 @@ def main() -> None:
     print("=" * 72)
     print("Reward Auto Tuning Report")
     print("=" * 72)
+    print(f"Records: total={len(records)}, train={len(train_records)}, validation={len(validation_records)}")
+    print(f"Selection score: baseline={baseline_selection_score:.6f}, best={best_selection_score:.6f}")
+    print()
     print("Baseline:")
-    for field in ["score", "total_reward", "avg_reward", "reward_std", "win_rate", "avg_positive_reward", "avg_negative_reward", "max_drawdown", "trade_count"]:
+    metric_fields = [
+        "score",
+        "validation_score",
+        "total_reward",
+        "avg_reward",
+        "reward_std",
+        "win_rate",
+        "trade_rate",
+        "avg_trade_reward",
+        "avg_hold_reward",
+        "cumulative_effective_pnl",
+        "avg_effective_pnl",
+        "directional_accuracy",
+        "missed_opportunity_rate",
+        "max_drawdown",
+        "trade_count",
+        "buy_sell_count",
+        "hold_count",
+    ]
+    for field in metric_fields:
         print("  -", _format_metric_line(field, getattr(baseline_result, field)))
+    if baseline_validation_result:
+        print("  Validation:")
+        for field in ["score", "avg_reward", "trade_rate", "cumulative_effective_pnl", "directional_accuracy", "missed_opportunity_rate", "max_drawdown"]:
+            print("  -", _format_metric_line(field, getattr(baseline_validation_result, field)))
     print()
     print("Best:")
-    for field in ["score", "total_reward", "avg_reward", "reward_std", "win_rate", "avg_positive_reward", "avg_negative_reward", "max_drawdown", "trade_count"]:
+    for field in metric_fields:
         print("  -", _format_metric_line(field, getattr(best_result, field)))
+    if best_validation_result:
+        print("  Validation:")
+        for field in ["score", "avg_reward", "trade_rate", "cumulative_effective_pnl", "directional_accuracy", "missed_opportunity_rate", "max_drawdown"]:
+            print("  -", _format_metric_line(field, getattr(best_validation_result, field)))
     print()
     print("Delta:")
-    print(f"  - score_delta={best_result.score - baseline_result.score:.6f}")
+    print(f"  - selection_score_delta={best_selection_score - baseline_selection_score:.6f}")
+    print(f"  - train_score_delta={best_result.score - baseline_result.score:.6f}")
+    if best_validation_result and baseline_validation_result:
+        print(f"  - validation_score_delta={best_validation_result.score - baseline_validation_result.score:.6f}")
     print(f"  - avg_reward_delta={best_result.avg_reward - baseline_result.avg_reward:.6f}")
+    print(f"  - trade_rate_delta={best_result.trade_rate - baseline_result.trade_rate:.6f}")
+    print(f"  - cumulative_effective_pnl_delta={best_result.cumulative_effective_pnl - baseline_result.cumulative_effective_pnl:.6f}")
     print(f"  - reward_std_delta={best_result.reward_std - baseline_result.reward_std:.6f}")
     print(f"  - max_drawdown_delta={best_result.max_drawdown - baseline_result.max_drawdown:.6f}")
     print()
@@ -462,7 +672,11 @@ def main() -> None:
 
     metric_chart = _plot_metric_comparison(report_dir, baseline_result, best_result)
     distribution_chart = _plot_reward_distribution(report_dir, baseline_result, best_result)
-    candidate_chart = _plot_candidate_scores(report_dir, [r.score for r in candidate_results], best_result.score, baseline_result.score)
+    candidate_scores = [
+        (r.validation_score * 0.7 + r.score * 0.3) if r.validation_score is not None else r.score
+        for r in candidate_results
+    ]
+    candidate_chart = _plot_candidate_scores(report_dir, candidate_scores, best_selection_score, baseline_selection_score)
     config_chart = _plot_config_changes(report_dir, baseline, best_config)
 
     report = {
@@ -470,6 +684,9 @@ def main() -> None:
         "config_path": args.config_path,
         "output_path": output_path,
         "window": args.window,
+        "validation_ratio": args.validation_ratio,
+        "train_count": len(train_records),
+        "validation_count": len(validation_records),
         "samples": args.samples,
         "grid": args.grid,
         "optimizer": optimizer_name,
@@ -478,8 +695,12 @@ def main() -> None:
         "optuna_best_params": optuna_best_params,
         "dry_run": args.dry_run,
         "report_dir": report_dir,
+        "baseline_selection_score": baseline_selection_score,
+        "best_selection_score": best_selection_score,
         "baseline": baseline_result.__dict__,
+        "baseline_validation": baseline_validation_result.__dict__ if baseline_validation_result else None,
         "best": best_result.__dict__,
+        "best_validation": best_validation_result.__dict__ if best_validation_result else None,
         "baseline_config": baseline,
         "best_config": best_config,
         "charts": {

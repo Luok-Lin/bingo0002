@@ -23,7 +23,10 @@ DEFAULT_REWARD_CONFIG = {
     "loss_streak_penalty_window": 4.0,
     "loss_streak_penalty_weight": 0.12,
     "hold_penalty_scale": 5.0,
-    "hold_penalty_weight": 0.05,
+    "hold_penalty_weight": 0.15,
+    "hold_streak_penalty_threshold": 3.0,
+    "hold_streak_penalty_weight": 0.05,
+    "correct_direction_reward_multiplier": 1.5,
     "reward_floor": -1.5,
     "reward_ceiling": 1.5,
 }
@@ -103,6 +106,19 @@ def _loss_streak(returns: Sequence[float]) -> int:
     return streak
 
 
+def _current_hold_streak(recent_actions: Sequence[str] | None, current_action: str) -> int:
+    if current_action != "HOLD":
+        return 0
+
+    streak = 1
+    for action in reversed(recent_actions or []):
+        if str(action or "HOLD").upper().strip().startswith("HOLD"):
+            streak += 1
+        else:
+            break
+    return streak
+
+
 @dataclass(frozen=True)
 class RewardBreakdown:
     reward: float
@@ -114,9 +130,11 @@ class RewardBreakdown:
     exposure_penalty: float
     loss_streak_penalty: float
     hold_penalty: float
+    hold_streak_penalty: float
     recent_volatility: float
     recent_max_drawdown: float
     recent_loss_streak: int
+    recent_hold_streak: int
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -127,6 +145,7 @@ def compute_trade_reward(
     actual_pnl_percent: float,
     market_move_percent: float,
     historical_pnls: Sequence[float] | None = None,
+    recent_actions: Sequence[str] | None = None,
     position: float = 1.0,
     config: dict | None = None,
 ) -> RewardBreakdown:
@@ -139,11 +158,12 @@ def compute_trade_reward(
     recent_volatility = pstdev(history) if len(history) > 1 else 0.0
     recent_max_drawdown = _max_drawdown(history + [float(actual_pnl_percent) / 100.0]) if history else abs(float(actual_pnl_percent)) / 100.0
     recent_loss_streak = _loss_streak(history)
+    recent_hold_streak = _current_hold_streak(recent_actions, action)
 
     direction_bonus = 0.0
     if action in {"BUY", "SELL"}:
         if actual_pnl_percent > 0:
-            direction_bonus = _cfg(config, "direction_bonus")
+            direction_bonus = _cfg(config, "direction_bonus") * _cfg(config, "correct_direction_reward_multiplier")
         elif actual_pnl_percent < 0:
             direction_bonus = -_cfg(config, "direction_penalty")
 
@@ -153,6 +173,12 @@ def compute_trade_reward(
     exposure_penalty = _clamp(position, 0.0, 1.0) * _cfg(config, "exposure_penalty_weight") if action in {"BUY", "SELL"} else 0.0
     loss_streak_penalty = _clamp(recent_loss_streak / _cfg(config, "loss_streak_penalty_window"), 0.0, 1.0) * _cfg(config, "loss_streak_penalty_weight") if action in {"BUY", "SELL"} else 0.0
     hold_penalty = _clamp(abs(float(market_move_percent)) / _cfg(config, "hold_penalty_scale"), 0.0, 1.0) * _cfg(config, "hold_penalty_weight") if action == "HOLD" else 0.0
+    hold_streak_penalty = 0.0
+    if action == "HOLD":
+        hold_threshold = _cfg(config, "hold_streak_penalty_threshold")
+        if recent_hold_streak >= hold_threshold:
+            hold_streak_ratio = (recent_hold_streak - hold_threshold + 1.0) / max(hold_threshold, 1.0)
+            hold_streak_penalty = _clamp(hold_streak_ratio, 0.0, 1.0) * _cfg(config, "hold_streak_penalty_weight")
 
     reward = (
         return_component
@@ -163,6 +189,7 @@ def compute_trade_reward(
         - exposure_penalty
         - loss_streak_penalty
         - hold_penalty
+        - hold_streak_penalty
     )
 
     reward = _clamp(reward, _cfg(config, "reward_floor"), _cfg(config, "reward_ceiling"))
@@ -177,7 +204,9 @@ def compute_trade_reward(
         exposure_penalty=exposure_penalty,
         loss_streak_penalty=loss_streak_penalty,
         hold_penalty=hold_penalty,
+        hold_streak_penalty=hold_streak_penalty,
         recent_volatility=recent_volatility,
         recent_max_drawdown=recent_max_drawdown,
         recent_loss_streak=recent_loss_streak,
+        recent_hold_streak=recent_hold_streak,
     )

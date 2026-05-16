@@ -1,0 +1,83 @@
+{
+  "ticker": "300210",
+  "generated_at": "2026-05-16 01:30:44",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 11.25,
+    "pct_change": -6.405990016638932,
+    "turnover": 11.220486818724714,
+    "volume": 54331836.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.6,
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.6,
+      "bull_ratio": 0.35,
+      "bear_ratio": 0.65,
+      "reasoning": "技术突破与主力出货背离，缩量回调实为买盘匮乏，警惕假突破，看空。",
+      "thought_process": "技术面良性调整判断与主力坚决出货事实矛盾。巨量突破伴随资金流出多为诱多，缩量回调实为买盘匮乏，资金面信号更具决定性。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "近期放巨量突破确立强势趋势，今日缩量回调显示抛压较轻，技术形态呈良性调整，后市看涨。positive",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "主力行为判断：出货派发。\n\n理由：连续两日主力净流出，首日巨量流出伴随股价大跌，显示主力坚决离场意愿。今日股价企稳但资金仍流出，确认为出货派发。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.6,
+      "bull_ratio": 0.15,
+      "bear_ratio": 0.85,
+      "reasoning": "基本面恶化叠加估值虚高，一季报由盈转亏形成负面预期差，风险收益比极差，建议偏空。",
+      "thought_process": "估值泡沫（负PE高PB）与业绩恶化（一季报亏损）共振，由盈转亏构成显著负面预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "**negative**\n\nPE为负显示经营亏损，PB高达14.53倍严重高估，背离行业基本面，无安全边际，风险极高。",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "negative",
+          "confidence": 0.3,
+          "reasoning": "证据不足，仅作轻微倾向。一季报业绩由盈转亏且营收锐减，龙虎榜数据暗示股价大跌，基本面呈现负面特征。（证据不足，仅作轻微倾向）",
+          "thought_process": "一季报显示净利润由盈转亏，营收同比大幅下降79.46%，基本面显著恶化；龙虎榜数据暗示股价大幅下跌（-10.01%），市场反馈负面。虽证据完整性不足，但核心财务数据指向明确。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.3,
+    "bear_score": 0.9,
+    "trend_strength": 0.5000000000000001,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "position_percent": 0.0
+  }
+}

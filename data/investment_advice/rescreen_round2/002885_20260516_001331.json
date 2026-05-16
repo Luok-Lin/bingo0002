@@ -1,0 +1,83 @@
+{
+  "ticker": "002885",
+  "generated_at": "2026-05-16 00:18:27",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 43.23,
+    "pct_change": -3.418230563002684,
+    "turnover": 13.731311760206518,
+    "volume": 32578337.0
+  },
+  "recommendation": {
+    "action": "HOLD",
+    "execution_action": "HOLD",
+    "position_percent": 0.0,
+    "confidence": 0.7,
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "next_action": "按裁判裁决进入风控执行。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.8,
+      "bull_ratio": 0.1,
+      "bear_ratio": 0.9,
+      "reasoning": "技术破位叠加主力巨量流出，头部确立，抛压沉重，短期下跌概率极大。",
+      "thought_process": "技术面高位长阴破位与资金面巨额流出形成共振，主力派发意图明确，趋势反转信号强烈。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价高位放量滞涨后，最新一日长阴下跌并跌破前日低点，短期头部确立，抛压显著，趋势转弱。 negative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "股价大涨伴随巨额流出，呈现典型“拉高出货”特征。前日下跌吸筹规模远小于今日流出，主力借反弹派发意图明显。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "negative",
+      "confidence": 0.6,
+      "bull_ratio": 0.3,
+      "bear_ratio": 0.7,
+      "reasoning": "估值泡沫巨大且缺乏安全边际，涨停仅为板块跟风无实质利好，价格严重背离基本面，下行风险极高。",
+      "thought_process": "基本面高估值风险(置信0.5)权重高于新闻跟风涨停(置信0.25)，价格严重偏离价值，存在显著的负向预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "PE超120倍、PB近8倍，显著高于行业均值，估值泡沫大，缺乏安全边际，基本面风险高。\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.25,
+          "reasoning": "证据不足，仅作轻微倾向，个股随电子板块走强并涨停，短期市场情绪偏暖。（证据不足，仅作轻微倾向）",
+          "thought_process": "切片显示个股在电子板块中领涨且触及涨停，资金关注度较高，短期技术面偏强，但缺乏深度基本面逻辑支撑，符合轻微看多条件。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "SELL",
+    "bull_score": 0.26,
+    "bear_score": 1.14,
+    "trend_strength": 0.6285714285714286,
+    "debate_trace": []
+  },
+  "risk": {
+    "decision": "HOLD",
+    "reason": "两个综合分析师方向一致(negative)，直接输出最终判断。 | A股长仓模式不执行做空，SELL 信号转为 HOLD（可理解为减仓/回避）。",
+    "position_percent": 0.0
+  }
+}

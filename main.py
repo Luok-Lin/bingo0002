@@ -24,14 +24,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents.roles import (
-    TechnicalAnalyst, SentimentAnalyst, FundamentalAnalyst,
-    MacroAnalyst, SmartMoneyAnalyst, NewsAnalystAgent,
-    QuantResearcherAgent, BullResearcher, BearResearcher,
+    TechnicalFlowAnalyst, FundamentalNewsAnalyst,
     GameReferee, RiskManager, TraderAgent, QuantitativeRiskReflector
 )
 from memory.memory_bank import MemoryBank
 from rag.retriever import SimpleRAG
-from dl.predictor import DLEngine
 import akshare as ak
 import pandas as pd
 import time
@@ -53,6 +50,9 @@ def parse_args():
     parser.add_argument("--tune-report-dir", default=None, help="自动调参图表报告目录")
     parser.add_argument("--no-train", action="store_true", help="跳过 DL 模型训练（用于加速回测）")
     parser.add_argument("--train-epochs", type=int, default=20, help="训练时使用的 epochs 数量（默认20）")
+    parser.add_argument("--debate-depth", type=int, default=2, help="两个综合分析师与裁判官的最大博弈轮数")
+    parser.add_argument("--human-comment", default="", help="人工评论，将作为经验沉淀写入记忆库")
+    parser.add_argument("--human-decision", default=None, help="人工修正最终方向，可选 BUY/SELL/HOLD")
     return parser.parse_args()
 
 
@@ -132,6 +132,7 @@ def save_run_summary(ticker: str, backtest_limit: int | None, run_rows: list[dic
 
 def fetch_external_knowledge(ticker):
     """并发拉取新闻与研报，减少 IO 等待。"""
+    ticker = str(ticker).strip().zfill(6)
     real_news_kb = []
 
     def fetch_news():
@@ -145,7 +146,7 @@ def fetch_external_knowledge(ticker):
                 date_int = 20000101
             news_items.append({
                 "page_content": "[外围资讯] " + str(row['新闻标题']) + " : " + str(row['新闻内容']),
-                "metadata": {"date_int": date_int}
+                "metadata": {"date_int": date_int, "ticker": ticker, "source": "news"}
             })
         return news_items, len(news_df)
 
@@ -160,7 +161,12 @@ def fetch_external_knowledge(ticker):
                 except:
                     date_int = 20000101
                 content = f"[券商研报] 机构: {row.get('机构', '未知')} | 评级: {row.get('东财评级', '未知')} | 核心观点摘要: {row.get('报告名称', '')}"
-                report_items.append({"page_content": content, "metadata": {"date_int": date_int}})
+                report_items.append(
+                    {
+                        "page_content": content,
+                        "metadata": {"date_int": date_int, "ticker": ticker, "source": "report"},
+                    }
+                )
         return report_items, 0 if report_df is None else len(report_df)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -194,7 +200,7 @@ def main():
     memory_bank = MemoryBank()
 
     if args.ticker:
-        ticker = args.ticker
+        ticker = str(args.ticker).strip().zfill(6)
         backtest_limit = args.backtest_limit
     else:
         try:
@@ -215,7 +221,8 @@ def main():
         except (EOFError, KeyboardInterrupt):
             print("\n程序已取消。")
             return
-            
+
+    ticker = str(ticker).strip().zfill(6)
     print(f"\n>>>> 正在从 AKShare 拉取 [{ticker}] 的过去一整年K线数据进行切片循环 ... <<<<")
     
     # 获取接近 1 年的日线行情数据（以 250 个交易日约1年计，我们将拉去稍多一些方便计算初始特征）
@@ -257,38 +264,22 @@ def main():
     if not real_news_kb:
         print("未抓取到任何外部文本，使用内置降级备用认知。")
         real_news_kb = [
-            {"page_content": "贵州茅台发布财报，利润大增", "metadata": {"date_int": 20240101}},
-            {"page_content": "白酒消费回暖", "metadata": {"date_int": 20240101}},
-            {"page_content": "宏观经济继续修复", "metadata": {"date_int": 20240101}},
-            {"page_content": "市场出现资金净流入", "metadata": {"date_int": 20240101}}
+            {
+                "page_content": f"{ticker} 暂未抓到外部新闻，维持中性观察并降低新闻因子权重。",
+                "metadata": {"date_int": 20991231, "ticker": ticker, "source": "fallback"},
+            }
         ]
         
     print(f"✅ RAG 混合语料筹备完毕，总计向 ChromaDB 灌入 {len(real_news_kb)} 条高维投研文本。")
 
     rag_engine = SimpleRAG(data_sources=real_news_kb)
-    dl_engine = DLEngine()
-
-    # == 使用回测的前60天作为真实的强化学习数据，真实训练量化模型 ==
-    print("\n>>>> 用前置的 60 天真实盘面数据训练 LSTM 量化预测模型 <<<<")
-    train_df = df_hist.head(60) # 截取前60天数据训练
-    if getattr(args, 'no_train', False):
-        print("[DL Engine] 检测到 --no-train，跳过模型训练以加速回测。")
-    else:
-        dl_engine.train_on_history(train_df, epochs=getattr(args, 'train_epochs', 20))
     
     # == 实例化全链路多智能体团队 ==
-    # 1. 分析团队
-    tech_analyst = TechnicalAnalyst(name="技术面分析师")
-    sentiment_analyst = SentimentAnalyst(name="舆情分析师")
-    fund_analyst = FundamentalAnalyst(name="基本面分析师")
-    macro_analyst = MacroAnalyst(name="宏观分析师")
-    smart_analyst = SmartMoneyAnalyst(name="主力资金分析师")
-    news_analyst = NewsAnalystAgent(name="新闻研报专家", rag_engine=rag_engine)
-    quant_agent = QuantResearcherAgent(name="深度学习量化专家", dl_engine=dl_engine)
+    # 1. 两个综合分析师：技术+主力资金、基本面+新闻研报
+    technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师")
+    fundamental_news_analyst = FundamentalNewsAnalyst(name="基本面新闻综合分析师", rag_engine=rag_engine)
     
-    # 2. 博弈层与执行层
-    bull_researcher = BullResearcher(name="看多金牌辩手")
-    bear_researcher = BearResearcher(name="看空金牌辩手")
+    # 2. 裁判博弈层与执行层
     referee = GameReferee(name="无情裁判官", memory_bank=memory_bank)
     risk_manager = RiskManager(name="风控大脑", memory_bank=memory_bank)
     trader_agent = TraderAgent(name="极速交易接口")
@@ -312,38 +303,38 @@ def main():
         window_df = df_hist.iloc[i-10 : i]
         features = window_df[['开盘', '收盘', '最高', '最低', '成交量', '成交额', '振幅', '涨跌幅', '涨跌额', '换手率']].values
         
-        # 阶段1: 并行调研产出
-        print("  [System] 启动底层多智能体兵团并发执行 (Async Threads)...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
-            future_tech = executor.submit(tech_analyst.step, ticker, features=features, target_date=str(target_date))
-            future_sent = executor.submit(sentiment_analyst.step, ticker, target_date=str(target_date))
-            future_fund = executor.submit(fund_analyst.step, ticker, target_date=str(target_date))
-            future_macro = executor.submit(macro_analyst.step, ticker, target_date=str(target_date))
-            future_smart = executor.submit(smart_analyst.step, ticker, target_date=str(target_date))
-            future_news = executor.submit(news_analyst.step, ticker, target_date=str(target_date))
-            future_quant = executor.submit(quant_agent.step, ticker, features_override=features, target_date=str(target_date))
+        # 阶段1: 两个综合分析师并行输出多空比率
+        print("  [System] 启动两个综合分析师并发执行 (Async Threads)...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            future_technical_flow = executor.submit(
+                technical_flow_analyst.step,
+                ticker,
+                features=features,
+                target_date=str(target_date),
+            )
+            future_fundamental_news = executor.submit(
+                fundamental_news_analyst.step,
+                ticker,
+                target_date=str(target_date),
+            )
 
-            r_tech = future_tech.result()
-            r_sent = future_sent.result()
-            r_fund = future_fund.result()
-            r_macro = future_macro.result()
-            r_smart = future_smart.result()
-            r_news = future_news.result()
-            r_quant = future_quant.result()
-        print("  [System] 并发调研阶段 1 完成，收集汇报完毕。")
+            r_technical_flow = future_technical_flow.result()
+            r_fundamental_news = future_fundamental_news.result()
+        print("  [System] 两个综合分析师完成多空比率判断。")
         
-        all_reports = [r_tech, r_sent, r_fund, r_macro, r_smart, r_news, r_quant]
+        all_reports = [r_technical_flow, r_fundamental_news]
         
-        # 阶段2: 多空博弈与裁决
-        bull_initial = bull_researcher.step(all_reports)
-        bear_initial = bear_researcher.step(all_reports)
-        
-        # 交叉质询辩论轮次 (Cross-Examination)
-        bull_case = bull_researcher.cross_examine(my_case=bull_initial, opponent_case=bear_initial)
-        bear_case = bear_researcher.cross_examine(my_case=bear_initial, opponent_case=bull_initial)
-        
-        # 裁判最终定夺
-        referee_decision = referee.step(bull_case, bear_case, ticker=ticker, reports=all_reports)
+        # 阶段2: 两个分析师与裁判官的有限深度博弈
+        referee_decision = referee.step_agent_game(
+            analyst_a=technical_flow_analyst,
+            analyst_b=fundamental_news_analyst,
+            case_a=r_technical_flow,
+            case_b=r_fundamental_news,
+            ticker=ticker,
+            max_depth=args.debate_depth,
+            human_comment=args.human_comment,
+            human_decision=args.human_decision,
+        )
         
         # 阶段3: 风控与执行
         final_instruction = risk_manager.step(ticker, referee_decision)

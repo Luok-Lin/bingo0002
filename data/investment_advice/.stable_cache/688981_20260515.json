@@ -1,0 +1,159 @@
+{
+  "ticker": "688981",
+  "generated_at": "2026-05-16 17:35:43",
+  "as_of_date": "2026-05-15",
+  "latest_market": {
+    "close": 119.02,
+    "pct_change": 0.9499575911789571,
+    "turnover": 6.641955465030066,
+    "volume": 132810054.0
+  },
+  "recommendation": {
+    "action": "BUY",
+    "execution_action": "BUY 10.34%",
+    "position_percent": 10.34,
+    "confidence": 0.6,
+    "reason": "分析师A捕捉到主力资金回补的主动信号，而分析师B仅因缺乏证据给出中性判断，并非看空。资金面往往领先于基本面，这种“技术强、基本面未验证”的状态构成典型的预期差买入机会。 | 建议配置仓位: 10.34%",
+    "next_action": "按裁判裁决进入风控执行。",
+    "stability_note": "稳定度中等，建议结合盘中验证。"
+  },
+  "analyst_cases": {
+    "technical_flow": {
+      "agent": "技术资金综合分析师",
+      "sentiment": "positive",
+      "confidence": 0.55,
+      "bull_ratio": 0.6,
+      "bear_ratio": 0.4,
+      "reasoning": "主力资金低位积极回补且净流入转正，确认洗盘意图，技术面抛压为吸筹行为，后市看多。",
+      "thought_process": "技术面冲高回落显示抛压，但资金面确认洗盘吸筹且回流强劲，资金逻辑权重高于技术形态。",
+      "source_reports": [
+        {
+          "agent": "技术面子模块",
+          "sentiment": "negative",
+          "confidence": 0.5,
+          "reasoning": "放量冲高回落，日K收阴且长上影，显示高位抛压沉重，短期趋势偏空。\n\nnegative",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "主力资金子模块",
+          "sentiment": "positive",
+          "confidence": 0.5,
+          "reasoning": "判断：洗盘吸筹。\n\n理由：股价先抑后扬，首日大额流出制造恐慌，次日净流入额反超首日流出，主力低位积极回补筹码，确认为洗盘吸筹。\n\npositive",
+          "thought_process": "解析失败，无法获取思维链"
+        }
+      ]
+    },
+    "fundamental_news": {
+      "agent": "基本面新闻综合分析师",
+      "sentiment": "neutral",
+      "confidence": 0.35,
+      "bull_ratio": 0.55,
+      "bear_ratio": 0.45,
+      "reasoning": "基本面验证缺失，新闻利好证据不足，整体中性偏多，预期差不显著。",
+      "thought_process": "基本面数据缺失导致安全边际无法验证，新闻端虽有盈利利好但证据力度极弱，难以形成显著预期差。",
+      "source_reports": [
+        {
+          "agent": "基本面子模块",
+          "sentiment": "neutral",
+          "confidence": 0.5,
+          "reasoning": "数据缺失无法验证安全边际。半导体行业周期性强且估值常溢价，缺乏证据支持多空判断。\nneutral",
+          "thought_process": "解析失败，无法获取思维链"
+        },
+        {
+          "agent": "新闻研报子模块",
+          "sentiment": "positive",
+          "confidence": 0.25,
+          "reasoning": "证据不足，仅作轻微倾向；一季报盈利及资产收购事项构成轻微利好预期。（证据不足，仅作轻微倾向）",
+          "thought_process": "财报显示盈利且现金流为正，并购重组事项推进有望增厚业绩，整体消息面偏暖，但缺乏深度分析支撑。"
+        }
+      ]
+    }
+  },
+  "referee": {
+    "decision": "BUY",
+    "bull_score": 0.522,
+    "bear_score": 0.378,
+    "trend_strength": 0.16,
+    "debate_trace": [
+      {
+        "round": 0,
+        "judge": {
+          "mode": "expectation_gap",
+          "decision": "BUY",
+          "confidence": 0.6,
+          "wrong_agent": "",
+          "reasoning": "分析师A捕捉到主力资金回补的主动信号，而分析师B仅因缺乏证据给出中性判断，并非看空。资金面往往领先于基本面，这种“技术强、基本面未验证”的状态构成典型的预期差买入机会。",
+          "next_action": "监控成交量确认资金流入持续性，关注基本面是否有滞后利好释放。"
+        },
+        "case_a": {
+          "agent": "技术资金综合分析师",
+          "sentiment": "positive",
+          "confidence": 0.55,
+          "bull_ratio": 0.6,
+          "bear_ratio": 0.4,
+          "reasoning": "主力资金低位积极回补且净流入转正，确认洗盘意图，技术面抛压为吸筹行为，后市看多。",
+          "thought_process": "技术面冲高回落显示抛压，但资金面确认洗盘吸筹且回流强劲，资金逻辑权重高于技术形态。",
+          "source_reports": [
+            {
+              "agent": "技术面子模块",
+              "sentiment": "negative",
+              "confidence": 0.5,
+              "reasoning": "放量冲高回落，日K收阴且长上影，显示高位抛压沉重，短期趋势偏空。\n\nnegative",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "主力资金子模块",
+              "sentiment": "positive",
+              "confidence": 0.5,
+              "reasoning": "判断：洗盘吸筹。\n\n理由：股价先抑后扬，首日大额流出制造恐慌，次日净流入额反超首日流出，主力低位积极回补筹码，确认为洗盘吸筹。\n\npositive",
+              "thought_process": "解析失败，无法获取思维链"
+            }
+          ]
+        },
+        "case_b": {
+          "agent": "基本面新闻综合分析师",
+          "sentiment": "neutral",
+          "confidence": 0.35,
+          "bull_ratio": 0.55,
+          "bear_ratio": 0.45,
+          "reasoning": "基本面验证缺失，新闻利好证据不足，整体中性偏多，预期差不显著。",
+          "thought_process": "基本面数据缺失导致安全边际无法验证，新闻端虽有盈利利好但证据力度极弱，难以形成显著预期差。",
+          "source_reports": [
+            {
+              "agent": "基本面子模块",
+              "sentiment": "neutral",
+              "confidence": 0.5,
+              "reasoning": "数据缺失无法验证安全边际。半导体行业周期性强且估值常溢价，缺乏证据支持多空判断。\nneutral",
+              "thought_process": "解析失败，无法获取思维链"
+            },
+            {
+              "agent": "新闻研报子模块",
+              "sentiment": "positive",
+              "confidence": 0.25,
+              "reasoning": "证据不足，仅作轻微倾向；一季报盈利及资产收购事项构成轻微利好预期。（证据不足，仅作轻微倾向）",
+              "thought_process": "财报显示盈利且现金流为正，并购重组事项推进有望增厚业绩，整体消息面偏暖，但缺乏深度分析支撑。"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "risk": {
+    "decision": "BUY",
+    "reason": "分析师A捕捉到主力资金回补的主动信号，而分析师B仅因缺乏证据给出中性判断，并非看空。资金面往往领先于基本面，这种“技术强、基本面未验证”的状态构成典型的预期差买入机会。 | 建议配置仓位: 10.34%",
+    "position_percent": 10.34
+  },
+  "cache_hit": false,
+  "stability_score": 0.67,
+  "stability_level": "medium",
+  "stability_note": "稳定度中等，建议结合盘中验证。",
+  "stability_diagnostics": {
+    "parse_fail_count": 3,
+    "rule_fallback_count": 0,
+    "empty_reason_count": 0,
+    "consensus_tech_fund": false,
+    "referee_action": "BUY",
+    "risk_action": "BUY",
+    "recommendation_action": "BUY"
+  }
+}
