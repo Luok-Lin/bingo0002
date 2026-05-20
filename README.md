@@ -172,16 +172,24 @@ uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 
 ### 2) 打开前端
 
-前端是独立静态页面，建议在 `frontend/` 目录启动一个静态服务器：
+推荐直接访问后端托管的页面（同源，避免 `Failed to fetch`）：
+
+- 浏览器打开：`http://127.0.0.1:8000`
+
+也可一键启动（默认不启用 `--reload`，避免长任务被中断）：
+
+```bash
+bash start_web.sh
+```
+
+如需独立静态前端（可选）：
 
 ```bash
 cd frontend
 python -m http.server 5173
 ```
 
-然后浏览器打开：`http://127.0.0.1:5173`
-
-默认 API 地址是：`http://127.0.0.1:8000`
+然后浏览器打开：`http://127.0.0.1:5173`（API 默认连 `http://127.0.0.1:8000`）
 
 ### 3) 每日自进化
 

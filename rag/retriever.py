@@ -9,23 +9,33 @@ import datetime
 import hashlib
 import os
 
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
+from rag.embedding_factory import get_embedding_function, project_base_dir, resolve_embedding_model
 
-try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-except Exception:
+
+def _load_chroma_class():
     try:
-        from langchain_community.embeddings import HuggingFaceEmbeddings
-    except Exception:
-        try:
-            from langchain.embeddings import HuggingFaceEmbeddings
-        except Exception:
-            HuggingFaceEmbeddings = None
-            print(
-                "[RAG Subsystem] WARNING: HuggingFaceEmbeddings import failed.\n"
-                "建议安装/更新依赖: pip install -U langchain-huggingface"
-            )
+        from langchain_chroma import Chroma
+    except Exception as exc:
+        raise RuntimeError(
+            "langchain-chroma 未能导入。请先安装依赖: pip install -r requirements.txt"
+        ) from exc
+    return Chroma
+
+
+def _build_document(page_content: str, metadata: dict):
+    try:
+        from langchain_core.documents import Document
+    except Exception as exc:
+        raise RuntimeError("langchain-core 未能导入。请先安装依赖: pip install -r requirements.txt") from exc
+    return Document(page_content=page_content, metadata=metadata)
+
+
+def resolve_chroma_persist_dir(base_dir: str | None = None) -> str:
+    base = base_dir or project_base_dir()
+    configured = str(os.getenv("CHROMA_PERSIST_DIR", "") or "").strip()
+    if configured:
+        return configured if os.path.isabs(configured) else os.path.abspath(os.path.join(base, configured))
+    return os.path.join(base, "data", "vector_db", "chroma_db")
 
 
 class SimpleRAG:
@@ -38,34 +48,15 @@ class SimpleRAG:
 
     def _init_vectorstore(self):
         print("[RAG Subsystem] 正在初始化 HuggingFace Embeddings 与 ChromaDB...")
-        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-
-        if HuggingFaceEmbeddings is None:
-            raise RuntimeError("HuggingFaceEmbeddings 未能导入，请运行: pip install -U langchain-huggingface")
-
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        local_model_base = os.path.join(
-            base_dir,
-            "data",
-            "models",
-            "all-MiniLM-L6-v2",
-            "models--sentence-transformers--all-MiniLM-L6-v2",
-            "snapshots",
-        )
-        model_name_or_path = "sentence-transformers/all-MiniLM-L6-v2"
-        model_kwargs = {}
-        if os.path.exists(local_model_base):
-            snapshots = [d for d in os.listdir(local_model_base) if os.path.isdir(os.path.join(local_model_base, d))]
-            if snapshots:
-                model_name_or_path = os.path.join(local_model_base, snapshots[0])
-                model_kwargs = {"local_files_only": True}
-                print(f"[RAG Subsystem] 使用本地模型: {model_name_or_path}")
-
-        embeddings = HuggingFaceEmbeddings(model_name=model_name_or_path, model_kwargs=model_kwargs)
+        base_dir = project_base_dir()
+        model_name_or_path, _ = resolve_embedding_model()
+        print(f"[RAG Subsystem] Embedding 模型: {model_name_or_path}")
+        embeddings = get_embedding_function()
+        Chroma = _load_chroma_class()
         self.vectorstore = Chroma(
             collection_name="market_news_reports",
             embedding_function=embeddings,
-            persist_directory=os.path.join(base_dir, "data", "vector_db", "chroma_db"),
+            persist_directory=resolve_chroma_persist_dir(base_dir),
         )
 
     @staticmethod
@@ -85,6 +76,7 @@ class SimpleRAG:
             metadata.get("ticker", "UNKNOWN")
         ).strip().isdigit() else str(metadata.get("ticker", "UNKNOWN")).strip()
         metadata.setdefault("source", "news_or_report")
+        metadata["is_fallback"] = str(metadata.get("source", "")).lower() == "fallback"
         return page_content, metadata
 
     @staticmethod
@@ -101,7 +93,7 @@ class SimpleRAG:
             page_content, metadata = self._normalize_item(item)
             if not page_content:
                 continue
-            documents.append(Document(page_content=page_content, metadata=metadata))
+            documents.append(_build_document(page_content, metadata))
             ids.append(self._build_doc_id(page_content, metadata))
 
         if not documents:
@@ -139,13 +131,23 @@ class SimpleRAG:
             except Exception:
                 pass
 
-        if not filter_conditions:
-            filter_dict = None
-        elif len(filter_conditions) == 1:
-            filter_dict = filter_conditions[0]
-        else:
-            filter_dict = {"$and": filter_conditions}
-
+        filter_dict = self._build_filter(filter_conditions)
         results = self.vectorstore.similarity_search(query, k=top_k, filter=filter_dict)
+        if not results and target_date:
+            fallback_conditions = [{"is_fallback": {"$eq": True}}]
+            if ticker:
+                fallback_conditions.insert(0, {"ticker": {"$eq": str(ticker).strip().zfill(6)}})
+            results = self.vectorstore.similarity_search(
+                query,
+                k=top_k,
+                filter=self._build_filter(fallback_conditions),
+            )
         return [doc.page_content for doc in results]
 
+    @staticmethod
+    def _build_filter(filter_conditions: list[dict]) -> dict | None:
+        if not filter_conditions:
+            return None
+        if len(filter_conditions) == 1:
+            return filter_conditions[0]
+        return {"$and": filter_conditions}

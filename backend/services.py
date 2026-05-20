@@ -3,8 +3,10 @@ from __future__ import annotations
 import csv
 import json
 import os
+import signal
 import subprocess
 import sys
+import threading
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -26,13 +28,50 @@ from .indexer import build_dashboard_summary
 from .storage import read_json, write_json
 
 
-def _run_command(cmd: list[str], cwd: str) -> dict:
-    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    return {
-        "returncode": proc.returncode,
-        "stdout": proc.stdout[-5000:],
-        "stderr": proc.stderr[-5000:],
+def _run_command(cmd: list[str], cwd: str, *, detach: bool = False) -> dict:
+    """Run a subprocess; detach=True keeps advice jobs alive across API reload."""
+    try:
+        timeout_seconds = max(30, int(str(os.getenv("TASK_SUBPROCESS_TIMEOUT_SECONDS", "3600")).strip() or "3600"))
+    except ValueError:
+        timeout_seconds = 3600
+    popen_kwargs: dict = {
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
     }
+    if detach and os.name != "nt":
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **popen_kwargs)
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        if os.name != "nt":
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except Exception:
+                proc.kill()
+        else:
+            proc.kill()
+        stdout, stderr = proc.communicate()
+    return {
+        "returncode": 124 if timed_out else proc.returncode,
+        "stdout": (stdout or "")[-5000:],
+        "stderr": ((stderr or "") + (f"\n[TIMEOUT] command exceeded {timeout_seconds}s" if timed_out else ""))[-5000:],
+        "timed_out": timed_out,
+    }
+
+
+def _validate_advice_payload(payload: dict, *, output_path: str) -> dict:
+    if not isinstance(payload, dict) or not payload:
+        raise RuntimeError(f"建议结果为空，未生成有效 JSON：{output_path}")
+    recommendation = payload.get("recommendation") or {}
+    action = str(recommendation.get("action", "")).strip()
+    if not action:
+        raise RuntimeError(f"建议结果缺少 recommendation.action：{output_path}")
+    return payload
 
 
 def _latest_file_from_dir(path: str, prefix: str = "", suffix: str = ".json") -> str | None:
@@ -52,15 +91,37 @@ def _latest_file_from_dir(path: str, prefix: str = "", suffix: str = ".json") ->
     return candidates[0][1]
 
 
-def _load_top_tickers(csv_path: str, top_n: int) -> list[str]:
-    tickers: list[str] = []
-    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.DictReader(f))
-    for row in rows[:top_n]:
-        code = str(row.get("股票代码", "")).strip()
+def _extract_ticker_from_csv_row(row: dict) -> str:
+    for key in ("股票代码", "ticker", "code", "symbol", "证券代码"):
+        code = str(row.get(key, "") or "").strip()
         if code:
-            tickers.append(code.zfill(6))
+            digits = "".join(ch for ch in code if ch.isdigit())
+            if len(digits) >= 6:
+                return digits[-6:].zfill(6)
+    for value in row.values():
+        text = str(value or "").strip()
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if len(digits) >= 6:
+            return digits[-6:].zfill(6)
+    return ""
+
+
+def _load_tickers_from_csv(csv_path: str, top_n: int | None = None) -> list[str]:
+    tickers: list[str] = []
+    seen: set[str] = set()
+    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            code = _extract_ticker_from_csv_row(row)
+            if code and code not in seen:
+                seen.add(code)
+                tickers.append(code)
+                if top_n and top_n > 0 and len(tickers) >= top_n:
+                    break
     return tickers
+
+
+def _load_top_tickers(csv_path: str, top_n: int) -> list[str]:
+    return _load_tickers_from_csv(csv_path, top_n=top_n)
 
 
 def run_initial_training(
@@ -133,15 +194,32 @@ def run_investment_advice(
         cmd.extend(["--human-comment", human_comment])
     if human_decision:
         cmd.extend(["--human-decision", human_decision])
-    run_result = _run_command(cmd, cwd=base_dir)
-    advice = read_json(output_path, {}) if run_result.get("returncode") == 0 else {}
-    dashboard = build_dashboard_summary()
+    run_result = _run_command(cmd, cwd=base_dir, detach=True)
+    returncode = int(run_result.get("returncode", 1))
+    if returncode != 0:
+        err_tail = str(run_result.get("stderr") or run_result.get("stdout") or "").strip()
+        hint = "（若后端刚重启，请重新点击生成建议）" if returncode in {-15, -9, -2} else ""
+        raise RuntimeError(
+            f"建议脚本执行失败，退出码 {returncode}{hint}"
+            + (f"：{err_tail[-400:]}" if err_tail else "")
+        )
+    if not os.path.exists(output_path):
+        raise RuntimeError(f"建议脚本未写出结果文件：{output_path}")
+    advice = _validate_advice_payload(read_json(output_path, {}), output_path=output_path)
+
+    def _refresh_dashboard() -> None:
+        try:
+            build_dashboard_summary()
+        except Exception:
+            pass
+
+    threading.Thread(target=_refresh_dashboard, daemon=True).start()
     return {
         "command": cmd,
         "run_result": run_result,
         "output_path": output_path,
         "advice": advice,
-        "dashboard_updated_at": dashboard.get("updated_at"),
+        "dashboard_updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -178,19 +256,37 @@ def list_recent_backtest_summaries(limit: int = 20) -> list[dict]:
     return out
 
 
+def resolve_evolution_tickers(
+    tickers: list[str] | None = None,
+    csv_path: str | None = None,
+    csv_top_n: int | None = None,
+) -> list[str]:
+    if tickers:
+        normalized = [str(t).strip().zfill(6) for t in tickers if str(t).strip()]
+        if normalized:
+            return list(dict.fromkeys(normalized))
+    if csv_path:
+        loaded = _load_tickers_from_csv(csv_path, top_n=csv_top_n)
+        if not loaded:
+            raise ValueError(f"CSV 未解析到有效股票代码: {csv_path}")
+        return loaded
+
+    watchlist = read_json(WATCHLIST_PATH, {})
+    fallback = [str(t).zfill(6) for t in watchlist.get("tickers", []) if str(t).strip()]
+    if fallback:
+        return fallback
+    return _load_top_tickers(TOP_HOLDINGS_CSV, 10)
+
+
 def run_daily_evolution(
     base_dir: str,
     tickers: list[str] | None = None,
     debate_depth: int = 2,
     mode: str = "backtest_update",
+    csv_path: str | None = None,
+    csv_top_n: int | None = None,
 ) -> dict:
-    if not tickers:
-        watchlist = read_json(WATCHLIST_PATH, {})
-        tickers = [str(t).zfill(6) for t in watchlist.get("tickers", [])]
-        if not tickers:
-            tickers = _load_top_tickers(TOP_HOLDINGS_CSV, 10)
-
-    tickers = [str(t).zfill(6) for t in tickers]
+    tickers = resolve_evolution_tickers(tickers=tickers, csv_path=csv_path, csv_top_n=csv_top_n)
     records: list[dict[str, Any]] = []
     for ticker in tickers:
         if mode == "advice_only":
@@ -277,6 +373,40 @@ def _load_price_map_for_ticker(ticker: str) -> dict[str, float]:
         if date and close == close:
             out[date] = close
     return out
+
+
+def get_market_ohlc_bars(ticker: str, limit: int = 40) -> dict:
+    """Return recent daily OHLC bars for mini K-line chart in the UI."""
+    ticker = str(ticker).strip().zfill(6)
+    limit = max(2, min(120, int(limit)))
+    prefix = "sh" if ticker.startswith("6") else "sz"
+    symbol = f"{prefix}{ticker}"
+    try:
+        df = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
+    except Exception as exc:
+        return {"ticker": ticker, "bars": [], "error": str(exc)}
+    if df is None or df.empty:
+        return {"ticker": ticker, "bars": [], "error": "no market data"}
+
+    bars: list[dict] = []
+    for _, row in df.tail(limit).iterrows():
+        date = str(row.get("date", "")).split(" ")[0]
+        open_px = _safe_float(row.get("open"), default=float("nan"))
+        high_px = _safe_float(row.get("high"), default=float("nan"))
+        low_px = _safe_float(row.get("low"), default=float("nan"))
+        close_px = _safe_float(row.get("close"), default=float("nan"))
+        if not date or not all(x == x for x in (open_px, high_px, low_px, close_px)):
+            continue
+        bars.append(
+            {
+                "date": date,
+                "open": round(open_px, 4),
+                "high": round(high_px, 4),
+                "low": round(low_px, 4),
+                "close": round(close_px, 4),
+            }
+        )
+    return {"ticker": ticker, "bars": bars, "count": len(bars)}
 
 
 def _load_advice_files() -> list[tuple[str, dict]]:
@@ -441,4 +571,3 @@ def settle_advice_experience(base_dir: str, max_items: int = 2000) -> dict:
         "skipped_count": skipped_count,
         "dashboard_updated_at": dashboard.get("updated_at"),
     }
-

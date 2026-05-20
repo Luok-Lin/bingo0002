@@ -9,6 +9,8 @@ from typing import Any
 from .config import ADVICE_DIR, ADVICE_SETTLEMENT_PATH, BACKTEST_SUMMARY_DIR, INDEX_SUMMARY_PATH, REFLECTIONS_PATH
 from .storage import read_json, write_json
 
+_SKIPPED_ADVICE_FILES = {"top10_screening_latest.json", "rescreen_top3_latest.json", "post_tune_validation_summary.json"}
+
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -17,15 +19,26 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _collect_latest_advice() -> dict[str, dict]:
-    latest: dict[str, tuple[str, dict]] = {}
+def _normalize_ticker(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) >= 6:
+        return digits[-6:].zfill(6)
+    if raw.isdigit():
+        return raw.zfill(6)
+    return ""
+
+
+def _iter_advice_payloads():
     if not os.path.isdir(ADVICE_DIR):
-        return {}
+        return
 
     for name in os.listdir(ADVICE_DIR):
         if not name.endswith(".json"):
             continue
-        if name in {"top10_screening_latest.json", "rescreen_top3_latest.json", "post_tune_validation_summary.json"}:
+        if name in _SKIPPED_ADVICE_FILES:
             continue
         path = os.path.join(ADVICE_DIR, name)
         try:
@@ -33,10 +46,19 @@ def _collect_latest_advice() -> dict[str, dict]:
                 payload = json.load(f)
         except Exception:
             continue
+        yield path, payload
 
-        ticker = str(payload.get("ticker", "")).zfill(6)
-        if not ticker:
+
+def _collect_advice_snapshot() -> tuple[dict[str, dict], int]:
+    latest: dict[str, tuple[str, dict]] = {}
+    total = 0
+
+    for path, payload in _iter_advice_payloads():
+        ticker = _normalize_ticker(payload.get("ticker", ""))
+        rec = payload.get("recommendation", {})
+        if not ticker or not isinstance(rec, dict):
             continue
+        total += 1
         generated_at = str(payload.get("generated_at", ""))
         # Fallback to file mtime if generated_at missing.
         if not generated_at:
@@ -44,34 +66,7 @@ def _collect_latest_advice() -> dict[str, dict]:
         current = latest.get(ticker)
         if current is None or generated_at >= current[0]:
             latest[ticker] = (generated_at, payload)
-    return {k: v[1] for k, v in latest.items()}
-
-
-def _collect_advice_total_count() -> int:
-    """
-    Count all valid advice snapshots in ADVICE_DIR.
-    Unlike latest_advice_count (unique tickers), this keeps historical runs.
-    """
-    if not os.path.isdir(ADVICE_DIR):
-        return 0
-    total = 0
-    for name in os.listdir(ADVICE_DIR):
-        if not name.endswith(".json"):
-            continue
-        if name in {"top10_screening_latest.json", "rescreen_top3_latest.json", "post_tune_validation_summary.json"}:
-            continue
-        path = os.path.join(ADVICE_DIR, name)
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                payload = json.load(f)
-        except Exception:
-            continue
-        ticker = str(payload.get("ticker", "")).zfill(6)
-        rec = payload.get("recommendation", {})
-        if not ticker or not isinstance(rec, dict):
-            continue
-        total += 1
-    return total
+    return {k: v[1] for k, v in latest.items()}, total
 
 
 def _collect_latest_backtest_runs(limit: int = 20) -> list[dict]:
@@ -105,7 +100,7 @@ def _reflection_stats() -> dict:
         action = str(row.get("decision", "UNKNOWN")).upper()
         action_counter[action] += 1
         rewards.append(_safe_float(row.get("reward_score"), 0.0))
-        ticker = str(row.get("ticker", "UNKNOWN")).zfill(6)
+        ticker = _normalize_ticker(row.get("ticker", "")) or "UNKNOWN"
         by_ticker[ticker].append(row)
 
     ticker_win_rates: list[dict] = []
@@ -137,13 +132,14 @@ def _reflection_stats() -> dict:
     }
 
 
-def _advice_settlement_stats() -> dict:
+def _advice_settlement_stats(total_files: int | None = None) -> dict:
     state = read_json(ADVICE_SETTLEMENT_PATH, {})
     if not isinstance(state, dict):
         state = {}
     settled = state.get("settled_keys", [])
     settled_set = set(str(x) for x in settled) if isinstance(settled, list) else set()
-    total_files = _collect_advice_total_count()
+    if total_files is None:
+        _, total_files = _collect_advice_snapshot()
     settled_count = len(settled_set)
     pending_count = max(0, total_files - settled_count)
     return {
@@ -154,8 +150,7 @@ def _advice_settlement_stats() -> dict:
 
 
 def build_dashboard_summary() -> dict:
-    latest_advice = _collect_latest_advice()
-    advice_total_count = _collect_advice_total_count()
+    latest_advice, advice_total_count = _collect_advice_snapshot()
     advice_actions = Counter()
     advice_rows: list[dict] = []
     for ticker, payload in latest_advice.items():
@@ -182,8 +177,7 @@ def build_dashboard_summary() -> dict:
         "latest_advice": advice_rows[:50],
         "recent_backtest_runs": _collect_latest_backtest_runs(),
         "reflection_stats": _reflection_stats(),
-        "advice_settlement_stats": _advice_settlement_stats(),
+        "advice_settlement_stats": _advice_settlement_stats(advice_total_count),
     }
     write_json(INDEX_SUMMARY_PATH, summary)
     return summary
-

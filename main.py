@@ -29,12 +29,28 @@ from agents.roles import (
 )
 from memory.memory_bank import MemoryBank
 from rag.retriever import SimpleRAG
+from dl.predictor import DLEngine
+from rl.market_rules import simulate_a_share_execution
 import akshare as ak
 import pandas as pd
 import time
 import datetime
 import concurrent.futures
 import json
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def parse_args():
@@ -53,6 +69,10 @@ def parse_args():
     parser.add_argument("--debate-depth", type=int, default=2, help="两个综合分析师与裁判官的最大博弈轮数")
     parser.add_argument("--human-comment", default="", help="人工评论，将作为经验沉淀写入记忆库")
     parser.add_argument("--human-decision", default=None, help="人工修正最终方向，可选 BUY/SELL/HOLD")
+    parser.add_argument("--commission-rate", type=float, default=_env_float("TRADING_COMMISSION_RATE", 0.0003), help="单边佣金率，默认 0.0003")
+    parser.add_argument("--stamp-duty-rate", type=float, default=_env_float("TRADING_STAMP_DUTY_RATE", 0.0005), help="印花税率，用于回合成本估计，默认 0.0005")
+    parser.add_argument("--slippage-bps", type=float, default=_env_float("TRADING_SLIPPAGE_BPS", 5.0), help="单边滑点，单位 bps，默认 5")
+    parser.add_argument("--allow-short", action="store_true", default=_env_bool("TRADING_ALLOW_SHORT", False), help="允许 SELL 作为做空执行；A股长仓回测默认关闭")
     return parser.parse_args()
 
 
@@ -104,19 +124,27 @@ def save_run_summary(ticker: str, backtest_limit: int | None, run_rows: list[dic
     summary_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "monitoring", "backtest_runs")
     os.makedirs(summary_dir, exist_ok=True)
 
-    total_trades = len([row for row in run_rows if row["action"] in {"BUY", "SELL"}])
+    requested_trades = len([row for row in run_rows if row["action"] in {"BUY", "SELL"}])
+    total_trades = len([row for row in run_rows if row.get("executed_action", row["action"]) in {"BUY", "SELL"}])
     avg_real_pnl = sum(row["real_pnl"] for row in run_rows) / len(run_rows)
     avg_effective_pnl = sum(row["effective_pnl"] for row in run_rows) / len(run_rows)
     win_rate = len([row for row in run_rows if row["effective_pnl"] > 0]) / len(run_rows)
+    total_effective_pnl = sum(row["effective_pnl"] for row in run_rows)
+    total_cost_percent = sum((row.get("execution") or {}).get("cost_percent", 0.0) for row in run_rows)
+    blocked_trades = len([row for row in run_rows if (row.get("execution") or {}).get("blocked_reason")])
 
     summary = {
         "ticker": ticker,
         "backtest_limit": backtest_limit,
         "auto_tune_enabled": auto_tune_enabled,
         "total_days": len(run_rows),
+        "requested_trades": requested_trades,
         "total_trades": total_trades,
         "avg_real_pnl": avg_real_pnl,
         "avg_effective_pnl": avg_effective_pnl,
+        "total_effective_pnl": total_effective_pnl,
+        "total_cost_percent": total_cost_percent,
+        "blocked_trades": blocked_trades,
         "win_rate": win_rate,
         "start_date": run_rows[0]["date"],
         "end_date": run_rows[-1]["date"],
@@ -130,20 +158,27 @@ def save_run_summary(ticker: str, backtest_limit: int | None, run_rows: list[dic
     print(f"\n📊 回测监控摘要已保存至: {file_path}")
 
 
-def fetch_external_knowledge(ticker):
+def _date_to_int(value, default: int = 20000101) -> int:
+    try:
+        return int(str(value)[:10].replace("-", ""))
+    except Exception:
+        return default
+
+
+def fetch_external_knowledge(ticker, cutoff_date: str | None = None):
     """并发拉取新闻与研报，减少 IO 等待。"""
     ticker = str(ticker).strip().zfill(6)
     real_news_kb = []
+    cutoff_int = _date_to_int(cutoff_date, default=99991231) if cutoff_date else None
 
     def fetch_news():
         news_items = []
         news_df = ak.stock_news_em(symbol=ticker)
         for _, row in news_df.head(100).iterrows():
             pub_time = str(row.get('发布时间', '2000-01-01'))
-            try:
-                date_int = int(pub_time[:10].replace('-', ''))
-            except:
-                date_int = 20000101
+            date_int = _date_to_int(pub_time)
+            if cutoff_int and date_int > cutoff_int:
+                continue
             news_items.append({
                 "page_content": "[外围资讯] " + str(row['新闻标题']) + " : " + str(row['新闻内容']),
                 "metadata": {"date_int": date_int, "ticker": ticker, "source": "news"}
@@ -156,10 +191,9 @@ def fetch_external_knowledge(ticker):
         if report_df is not None and not report_df.empty:
             for _, row in report_df.iterrows():
                 pub_time = str(row.get('日期', '2000-01-01'))
-                try:
-                    date_int = int(pub_time[:10].replace('-', ''))
-                except:
-                    date_int = 20000101
+                date_int = _date_to_int(pub_time)
+                if cutoff_int and date_int > cutoff_int:
+                    continue
                 content = f"[券商研报] 机构: {row.get('机构', '未知')} | 评级: {row.get('东财评级', '未知')} | 核心观点摘要: {row.get('报告名称', '')}"
                 report_items.append(
                     {
@@ -256,35 +290,6 @@ def main():
         print(f"历史数据获取致命错误: {e}")
         return
 
-    # 通过 API 获取标的真实历史新闻，代替 mock
-    print(f"\n[系统新闻获取] 获取真实的 {ticker} 新鲜历史新闻以构建知识库 (RAG DB) ...")
-    print(f"[研报与深度评级] 正在获取 {ticker} 历史券商研报补充认知...")
-    real_news_kb = fetch_external_knowledge(ticker)
-
-    if not real_news_kb:
-        print("未抓取到任何外部文本，使用内置降级备用认知。")
-        real_news_kb = [
-            {
-                "page_content": f"{ticker} 暂未抓到外部新闻，维持中性观察并降低新闻因子权重。",
-                "metadata": {"date_int": 20991231, "ticker": ticker, "source": "fallback"},
-            }
-        ]
-        
-    print(f"✅ RAG 混合语料筹备完毕，总计向 ChromaDB 灌入 {len(real_news_kb)} 条高维投研文本。")
-
-    rag_engine = SimpleRAG(data_sources=real_news_kb)
-    
-    # == 实例化全链路多智能体团队 ==
-    # 1. 两个综合分析师：技术+主力资金、基本面+新闻研报
-    technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师")
-    fundamental_news_analyst = FundamentalNewsAnalyst(name="基本面新闻综合分析师", rag_engine=rag_engine)
-    
-    # 2. 裁判博弈层与执行层
-    referee = GameReferee(name="无情裁判官", memory_bank=memory_bank)
-    risk_manager = RiskManager(name="风控大脑", memory_bank=memory_bank)
-    trader_agent = TraderAgent(name="极速交易接口")
-    reflector_agent = QuantitativeRiskReflector(name="量化策略迭代官", memory_bank=memory_bank)
-    
     start_index = 60 # 从已经过拟合/训练完毕后的第60天起开始向后滚动盘面
     total_days = len(df_hist) - 1 # 留最后一天给 T+1 用
     run_rows = []
@@ -294,6 +299,42 @@ def main():
         override_start = total_days - backtest_limit
         start_index = max(start_index, override_start)
         print(f"\n[测试模式] 已激活: 仅回测最近的 {backtest_limit} 个交易日...")
+
+    knowledge_cutoff_date = str(df_hist.iloc[total_days - 1]["日期"])
+    # 通过 API 获取标的真实历史新闻，代替 mock；回测语料只允许截至回测最后一个 T 日。
+    print(f"\n[系统新闻获取] 获取真实的 {ticker} 截至 {knowledge_cutoff_date} 的历史新闻以构建知识库 (RAG DB) ...")
+    print(f"[研报与深度评级] 正在获取 {ticker} 历史券商研报补充认知...")
+    real_news_kb = fetch_external_knowledge(ticker, cutoff_date=knowledge_cutoff_date)
+
+    if not real_news_kb:
+        print("未抓取到任何外部文本，使用内置降级备用认知。")
+        real_news_kb = [
+            {
+                "page_content": f"{ticker} 暂未抓到外部新闻，维持中性观察并降低新闻因子权重。",
+                "metadata": {"date_int": _date_to_int(knowledge_cutoff_date), "ticker": ticker, "source": "fallback"},
+            }
+        ]
+
+    print(f"✅ RAG 混合语料筹备完毕，总计向 ChromaDB 灌入 {len(real_news_kb)} 条高维投研文本。")
+
+    rag_engine = SimpleRAG(data_sources=real_news_kb)
+
+    dl_engine = None
+    if not args.no_train:
+        dl_engine = DLEngine()
+        train_df = df_hist.iloc[:start_index].copy()
+        dl_engine.train_on_history(train_df, epochs=args.train_epochs)
+    else:
+        print("[DL Engine] 已按 --no-train 跳过 DL 子模块训练与接入。")
+
+    # == 实例化全链路多智能体团队 ==
+    technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师", dl_engine=dl_engine)
+    fundamental_news_analyst = FundamentalNewsAnalyst(name="基本面新闻综合分析师", rag_engine=rag_engine)
+
+    referee = GameReferee(name="无情裁判官", memory_bank=memory_bank)
+    risk_manager = RiskManager(name="风控大脑", memory_bank=memory_bank)
+    trader_agent = TraderAgent(name="极速交易接口")
+    reflector_agent = QuantitativeRiskReflector(name="量化策略迭代官", memory_bank=memory_bank)
     
     for i in range(start_index, total_days):
         target_date = df_hist.iloc[i]['日期']
@@ -343,22 +384,46 @@ def main():
         # 阶段4: 模拟 T+1 日，去取第二天（i+1 行）的真实收盘涨跌幅！
         next_day_date = df_hist.iloc[i+1]['日期']
         real_pnl = float(df_hist.iloc[i+1]['涨跌幅'])
+        current_change_percent = float(df_hist.iloc[i]['涨跌幅'])
         
         print(f"  [游标揭晓] 进入 T+1日 ({next_day_date})，市场真实收盘涨跌幅为: {real_pnl}%")
-        
-        # 迭代官完成记录与数学期望计算
-        reflector_agent.step(ticker, decision, all_reports, pnl_percent=real_pnl)
 
         action, position = _parse_action(decision)
-        effective_pnl = real_pnl * position if action == "BUY" else ((-real_pnl) * position if action == "SELL" else 0.0)
+        execution = simulate_a_share_execution(
+            ticker=ticker,
+            action=action,
+            position=position,
+            market_move_percent=real_pnl,
+            current_change_percent=current_change_percent,
+            allow_short=args.allow_short,
+            commission_rate=args.commission_rate,
+            stamp_duty_rate=args.stamp_duty_rate,
+            slippage_bps=args.slippage_bps,
+        )
+        effective_pnl = execution.net_pnl_percent
+        if execution.blocked_reason:
+            print(f"  [执行约束] {execution.blocked_reason}")
+        print(
+            "  [净值结算] "
+            f"{execution.executed_action} 仓位 {execution.executed_position*100:.2f}% | "
+            f"毛收益 {execution.gross_pnl_percent:.3f}% | 成本 {execution.cost_percent:.3f}% | "
+            f"净收益 {effective_pnl:.3f}%"
+        )
+
+        # 迭代官完成记录与数学期望计算，使用经过交易约束与成本后的净收益。
+        reflector_agent.step(ticker, decision, all_reports, pnl_percent=real_pnl, execution_result=execution.to_dict())
+
         run_rows.append({
             "date": target_date,
             "next_date": next_day_date,
             "decision": decision,
             "action": action,
             "position": position,
+            "executed_action": execution.executed_action,
+            "executed_position": execution.executed_position,
             "real_pnl": real_pnl,
             "effective_pnl": effective_pnl,
+            "execution": execution.to_dict(),
         })
         
         # 为了不刷屏太快，微微暂停 0.1秒

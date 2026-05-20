@@ -6,6 +6,12 @@ import json
 import os
 from rl.reward import compute_trade_reward
 
+from .debate_consensus import (
+    build_alignment_bundle,
+    cooperative_judge_prompt,
+    rule_based_consensus,
+)
+
 provider = AkShareProvider()
 
 # 加载结构化角色定义
@@ -513,18 +519,23 @@ class CombinedAnalystAgent(BaseAgent):
         return case
 
     def debate_round(self, ticker: str, own_case: dict, opponent_case: dict, referee_view: dict, round_idx: int) -> dict:
+        own_role = "赞成策略" if str(own_case.get("sentiment", "")).lower() == "positive" else (
+            "反对策略" if str(own_case.get("sentiment", "")).lower() == "negative" else "中立策略"
+        )
         prompt = (
-            "你是 {agent}，正在与另一位分析师和裁判官进行第 {round_idx} 轮单独博弈。\n"
+            "你是 {agent}（{own_role}），参与双AI合作博弈第 {round_idx} 轮，目标是对齐信息后收敛共识，非零和对立。\n"
             "你的当前观点：多方比率={own_bull:.2f}, 空方比率={own_bear:.2f}, "
             "方向={own_sentiment}, 理由={own_reason}\n"
             "对方观点：多方比率={opp_bull:.2f}, 空方比率={opp_bear:.2f}, "
             "方向={opp_sentiment}, 理由={opp_reason}\n"
-            "裁判临时判断：{referee_view}\n"
-            "请判断你是否被说服，或者是否能更清晰说明对方错误。只输出合法 JSON："
+            "裁判合作博弈判断：{referee_view}\n"
+            "规则：1) 事实论据可保留并修正；2) 赞成方需回应风险边界，反对方需承认价值路径；"
+            "3) 剔除极端偏执。若被说服可 conceded=true。只输出合法 JSON："
             "{{\"sentiment\":\"positive/negative/neutral\", \"bull_ratio\":0.0到1.0, "
             "\"bear_ratio\":0.0到1.0, \"confidence\":0.0到1.0, "
             "\"conceded\":true或false, \"reasoning\":\"80字内更新后的观点\"}}"
         ).format(
+            own_role=own_role,
             ticker=ticker,
             agent=self.name,
             round_idx=round_idx,
@@ -555,26 +566,31 @@ class CombinedAnalystAgent(BaseAgent):
 
 
 class TechnicalFlowAnalyst(CombinedAnalystAgent):
-    def __init__(self, name: str):
+    def __init__(self, name: str, dl_engine=None):
         role_name = ROLES_CONFIG.get("TechnicalFlowAnalyst", {}).get("role", "技术资金综合分析师")
         super().__init__(name, role_name)
         self.technical = TechnicalAnalyst(name="技术面子模块")
         self.smart_money = SmartMoneyAnalyst(name="主力资金子模块")
+        self.quant = QuantResearcherAgent(name="DL量化子模块", dl_engine=dl_engine) if dl_engine is not None else None
         self.config = ROLES_CONFIG.get("TechnicalFlowAnalyst", {})
 
     def step(self, ticker: str, features: np.ndarray, target_date: str = None):
-        tech_report = self.technical.step(ticker, features=features, target_date=target_date)
-        flow_report = self.smart_money.step(ticker, target_date=target_date)
+        reports = [
+            self.technical.step(ticker, features=features, target_date=target_date),
+            self.smart_money.step(ticker, target_date=target_date),
+        ]
+        if self.quant is not None:
+            reports.append(self.quant.step(ticker, features_override=features, target_date=target_date))
         prompt_template = self.config.get(
             "prompt_template",
-            "你是【技术资金综合分析师】，负责把技术面趋势和主力资金行为合成一个交易方向。\n"
+            "你是【技术资金综合分析师】，负责把技术面趋势、主力资金行为和可用的DL量化预测合成一个交易方向。\n"
             "标的：{ticker}\n证据：\n{evidence}\n"
             "请输出你自己的多空比率判断，而不是简单复述子模块。只输出合法 JSON："
             "{{\"sentiment\":\"positive/negative/neutral\", \"bull_ratio\":0.0到1.0, "
             "\"bear_ratio\":0.0到1.0, \"confidence\":0.0到1.0, "
             "\"thought_process\":\"简短推理\", \"reasoning\":\"50字内结论\"}}"
         )
-        return self._build_ratio_case(ticker, [tech_report, flow_report], prompt_template)
+        return self._build_ratio_case(ticker, reports, prompt_template)
 
 
 class FundamentalNewsAnalyst(CombinedAnalystAgent):
@@ -732,44 +748,47 @@ class GameReferee(BaseAgent):
         except Exception as e:
             self.log(f"⚠️ 人工经验沉淀失败: {e}")
 
-    def _judge_two_agent_disagreement(self, ticker: str, case_a: dict, case_b: dict, round_idx: int = 0) -> dict:
-        prompt = (
-            "你是裁判官。两个综合分析师对标的 {ticker} 方向不同，请判断这是【预期差买入机会】还是【一方明显错误】。\n"
-            "分析师A：{agent_a}，方向={sent_a}，多={bull_a:.2f}，空={bear_a:.2f}，置信度={conf_a:.2f}，理由={reason_a}\n"
-            "分析师B：{agent_b}，方向={sent_b}，多={bull_b:.2f}，空={bear_b:.2f}，置信度={conf_b:.2f}，理由={reason_b}\n"
-            "当前轮次：{round_idx}\n"
-            "只输出合法 JSON：{{\"mode\":\"expectation_gap/opponent_wrong/unclear\", "
-            "\"decision\":\"BUY/SELL/HOLD\", \"confidence\":0.0到1.0, "
-            "\"wrong_agent\":\"如果一方明显错误，填写其agent名，否则为空\", "
-            "\"reasoning\":\"100字内裁判判断\", \"next_action\":\"下一步动作\"}}"
-        ).format(
-            ticker=ticker,
-            agent_a=case_a.get("agent", "分析师A"),
-            sent_a=case_a.get("sentiment", "neutral"),
-            bull_a=case_a.get("bull_ratio", 0.5),
-            bear_a=case_a.get("bear_ratio", 0.5),
-            conf_a=case_a.get("confidence", 0.5),
-            reason_a=case_a.get("reasoning", ""),
-            agent_b=case_b.get("agent", "分析师B"),
-            sent_b=case_b.get("sentiment", "neutral"),
-            bull_b=case_b.get("bull_ratio", 0.5),
-            bear_b=case_b.get("bear_ratio", 0.5),
-            conf_b=case_b.get("confidence", 0.5),
-            reason_b=case_b.get("reasoning", ""),
-            round_idx=round_idx,
-        )
-        parsed = parse_llm_json(self.query_llm(prompt))
+    def _merge_cooperative_judge(self, parsed: dict, alignment: dict, case_a: dict, case_b: dict) -> dict:
+        fallback = rule_based_consensus(alignment)
         decision = normalize_decision(parsed.get("decision"))
         if not decision:
-            decision, _, _ = self._decision_from_cases([case_a, case_b])
+            decision = fallback.get("decision") or self._decision_from_cases([case_a, case_b])[0]
+        try:
+            confidence = float(parsed.get("confidence", fallback.get("confidence", 0.5)) or 0.5)
+        except (TypeError, ValueError):
+            confidence = float(fallback.get("confidence", 0.5) or 0.5)
         return {
-            "mode": parsed.get("mode", "unclear"),
+            "mode": parsed.get("mode") or fallback.get("mode", "cooperative_consensus"),
             "decision": decision,
-            "confidence": float(parsed.get("confidence", 0.5) or 0.5),
-            "wrong_agent": parsed.get("wrong_agent", ""),
-            "reasoning": parsed.get("reasoning", "裁判未给出明确理由。"),
-            "next_action": parsed.get("next_action", ""),
+            "confidence": confidence,
+            "wrong_agent": parsed.get("wrong_agent", fallback.get("wrong_agent", "")),
+            "reasoning": parsed.get("reasoning") or fallback.get("reasoning", "合作博弈未给出明确理由。"),
+            "next_action": parsed.get("next_action") or fallback.get("next_action", ""),
+            "fusion_strategy": parsed.get("fusion_strategy", fallback.get("fusion_strategy", "融合共识")),
+            "game_matrix": parsed.get("game_matrix") or fallback.get("game_matrix"),
+            "consensus_layers": parsed.get("consensus_layers") or fallback.get("consensus_layers"),
+            "pro_content_kept": parsed.get("pro_content_kept", fallback.get("pro_content_kept", "")),
+            "con_content_kept": parsed.get("con_content_kept", fallback.get("con_content_kept", "")),
+            "extreme_removed": parsed.get("extreme_removed", fallback.get("extreme_removed", "")),
+            "pro_weight": parsed.get("pro_weight", fallback.get("pro_weight", alignment.get("pro_weight", 0.5))),
+            "con_weight": parsed.get("con_weight", fallback.get("con_weight", alignment.get("con_weight", 0.5))),
+            "alignment": {
+                "scenario": alignment.get("scenario"),
+                "payoff_matrix": alignment.get("payoff_matrix"),
+            },
         }
+
+    def _judge_two_agent_disagreement(self, ticker: str, case_a: dict, case_b: dict, round_idx: int = 0) -> dict:
+        alignment = build_alignment_bundle(ticker, case_a, case_b)
+        prompt = cooperative_judge_prompt(ticker, alignment, round_idx=round_idx)
+        if self.config.get("cooperative_judge_prompt"):
+            prompt = self.config["cooperative_judge_prompt"].format(
+                ticker=ticker,
+                round_idx=round_idx,
+                alignment=json.dumps(alignment, ensure_ascii=False),
+            )
+        parsed = parse_llm_json(self.query_llm(prompt))
+        return self._merge_cooperative_judge(parsed, alignment, case_a, case_b)
 
     def step_agent_game(
         self,
@@ -789,18 +808,22 @@ class GameReferee(BaseAgent):
 
         if case_a["sentiment"] == case_b["sentiment"]:
             decision, bull_score, bear_score = self._decision_from_cases([case_a, case_b])
-            reasoning = f"两个综合分析师方向一致({case_a['sentiment']})，直接输出最终判断。"
+            reasoning = (
+                f"两分析师方向一致({case_a['sentiment']})，无需对立博弈，"
+                f"直接合并为统一共识。"
+            )
             confidence = round((case_a["confidence"] + case_b["confidence"]) / 2, 3)
             mode = "same_direction"
         else:
             judge_view = self._judge_two_agent_disagreement(ticker, case_a, case_b, round_idx=0)
             debate_trace.append({"round": 0, "judge": judge_view, "case_a": case_a, "case_b": case_b})
-            mode = judge_view.get("mode", "unclear")
+            mode = judge_view.get("mode", "cooperative_consensus")
             decision = judge_view["decision"]
             confidence = judge_view["confidence"]
             reasoning = judge_view["reasoning"]
 
-            if mode != "expectation_gap":
+            terminal_modes = {"cooperative_consensus", "expectation_gap", "agent_consensus"}
+            if mode not in terminal_modes:
                 for round_idx in range(1, max_depth + 1):
                     case_a = analyst_a.debate_round(ticker, case_a, case_b, judge_view, round_idx)
                     case_b = analyst_b.debate_round(ticker, case_b, case_a, judge_view, round_idx)
@@ -810,19 +833,22 @@ class GameReferee(BaseAgent):
                     if case_a["sentiment"] == case_b["sentiment"]:
                         decision, _, _ = self._decision_from_cases([case_a, case_b])
                         confidence = round((case_a["confidence"] + case_b["confidence"]) / 2, 3)
-                        reasoning = f"第 {round_idx} 轮后两个分析师观点达成一致：{case_a['sentiment']}。"
+                        reasoning = f"第 {round_idx} 轮合作博弈后双方观点收敛一致：{case_a['sentiment']}。"
                         mode = "agent_consensus"
                         break
-                    if judge_view.get("mode") == "expectation_gap":
+                    if judge_view.get("mode") in {"cooperative_consensus", "expectation_gap"}:
                         decision = judge_view["decision"]
                         confidence = judge_view["confidence"]
-                        reasoning = f"第 {round_idx} 轮裁判确认这是预期差机会：{judge_view['reasoning']}"
-                        mode = "expectation_gap"
+                        fusion = judge_view.get("fusion_strategy", "融合共识")
+                        reasoning = (
+                            f"第 {round_idx} 轮达成{fusion}：{judge_view['reasoning']}"
+                        )
+                        mode = judge_view.get("mode", "cooperative_consensus")
                         break
                 else:
                     decision = judge_view["decision"]
                     confidence = judge_view["confidence"]
-                    reasoning = f"达到博弈深度上限 {max_depth}，采用裁判最终判断：{judge_view['reasoning']}"
+                    reasoning = f"达到博弈深度上限 {max_depth}，采用合作博弈最终共识：{judge_view['reasoning']}"
                     mode = "depth_limited_referee"
 
             bull_score, bear_score = self._case_scores([case_a, case_b])
@@ -845,8 +871,13 @@ class GameReferee(BaseAgent):
             "key_risks": [],
             "next_action": "按裁判裁决进入风控执行。",
             "trend_strength": trend_strength,
-            "light_position": decision == "BUY" and mode == "expectation_gap",
+            "light_position": decision == "BUY"
+            and mode in {"expectation_gap", "cooperative_consensus"},
             "debate_trace": debate_trace,
+            "game_theory": {
+                "framework": "dual_agent_cooperative_nash",
+                "formula": "赞成可行内容 + 反对风险规避 - 极端偏执",
+            },
             "analyst_cases": [case_a, case_b],
             "human_comment": human_comment,
         }
@@ -1117,7 +1148,7 @@ class QuantitativeRiskReflector(BaseAgent):
         self.memory_bank = memory_bank
         self.config = ROLES_CONFIG.get("QuantitativeRiskReflector", {})
         
-    def step(self, ticker: str, decision: str, reports: list, pnl_percent: float):
+    def step(self, ticker: str, decision: str, reports: list, pnl_percent: float, execution_result: dict | None = None):
         # 提取真实意图与仓位（可能是 BUY 30.5%）
         action = "HOLD"
         position = 0.0
@@ -1135,10 +1166,28 @@ class QuantitativeRiskReflector(BaseAgent):
             except:
                 position = 1.0
 
-        # 由于启用了动态仓位，真实的盈亏应当是：标的波动率 * 仓位暴露
-        actual_pnl = pnl_percent * position if action == "BUY" else ((-pnl_percent) * position if action == "SELL" else 0.0)
+        market_move_percent = float(pnl_percent or 0.0)
+        requested_action = action
+        blocked_reason = ""
+        gross_pnl_percent = None
+        cost_percent = 0.0
 
-        self.log(f"T+1日模拟结算复盘，标的[{ticker}] 原波动 [{pnl_percent}%], 实际账户盈亏贡献 [{actual_pnl:.3f}%]")
+        if execution_result:
+            action = str(execution_result.get("executed_action", action) or "HOLD").upper()
+            requested_action = str(execution_result.get("requested_action", requested_action) or requested_action).upper()
+            position = float(execution_result.get("executed_position", position) or 0.0)
+            actual_pnl = float(execution_result.get("net_pnl_percent", 0.0) or 0.0)
+            market_move_percent = float(execution_result.get("market_move_percent", market_move_percent) or 0.0)
+            gross_pnl_percent = float(execution_result.get("gross_pnl_percent", 0.0) or 0.0)
+            cost_percent = float(execution_result.get("cost_percent", 0.0) or 0.0)
+            blocked_reason = str(execution_result.get("blocked_reason", "") or "")
+        else:
+            # 由于启用了动态仓位，真实的盈亏应当是：标的波动率 * 仓位暴露
+            actual_pnl = pnl_percent * position if action == "BUY" else ((-pnl_percent) * position if action == "SELL" else 0.0)
+
+        cost_note = f", 成本 [{cost_percent:.3f}%]" if execution_result else ""
+        block_note = f", 阻断原因 [{blocked_reason}]" if blocked_reason else ""
+        self.log(f"T+1日模拟结算复盘，标的[{ticker}] 原波动 [{market_move_percent}%], 实际账户盈亏贡献 [{actual_pnl:.3f}%]{cost_note}{block_note}")
         
         ticker_records = [m for m in self.memory_bank.memory if m.get('ticker') == ticker]
         recent_actions = [m.get('decision', 'HOLD') for m in ticker_records]
@@ -1175,7 +1224,7 @@ class QuantitativeRiskReflector(BaseAgent):
         reward = compute_trade_reward(
             action=action,
             actual_pnl_percent=actual_pnl,
-            market_move_percent=pnl_percent,
+            market_move_percent=market_move_percent,
             # 只传入“过去样本”，当前样本由 compute_trade_reward 内部统一拼接处理。
             historical_pnls=historical_pnls,
             recent_actions=recent_actions,
@@ -1197,13 +1246,17 @@ class QuantitativeRiskReflector(BaseAgent):
             else:
                 reflection_text = f"微小摩擦 ({actual_pnl:.2f}%)。当前统计: {stats_msg}"
         else:
-            reflection_text = f"本次为空仓观望(HOLD)，连续观望 {reward.recent_hold_streak} 次，已计入机会成本惩罚。"
+            if blocked_reason:
+                reflection_text = f"本次信号 {requested_action} 被执行约束阻断，按 HOLD 结算；连续观望 {reward.recent_hold_streak} 次。原因: {blocked_reason}"
+            else:
+                reflection_text = f"本次为空仓观望(HOLD)，连续观望 {reward.recent_hold_streak} 次，已计入机会成本惩罚。"
             
         record = {
             "ticker": ticker,
             "decision": action,
+            "requested_decision": requested_action,
             "pnl_percent": round(actual_pnl, 2),
-            "market_move_percent": round(pnl_percent, 2),
+            "market_move_percent": round(market_move_percent, 2),
             "position": round(position, 4),
             "reward_score": round(reward.reward, 4),
             "reward_text": reward_msg,
@@ -1211,6 +1264,12 @@ class QuantitativeRiskReflector(BaseAgent):
             "reflection_text": reflection_text,
             "math_stats": stats_msg
         }
+        if execution_result:
+            record.update({
+                "gross_pnl_percent": round(gross_pnl_percent or 0.0, 4),
+                "cost_percent": round(cost_percent, 4),
+                "execution_blocked_reason": blocked_reason,
+            })
         
         # 将新经验记录，并且触发RAG后台自动向量化并打标签
         self.memory_bank.append(record)

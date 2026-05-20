@@ -22,7 +22,8 @@ from agents.roles import (
     TechnicalFlowAnalyst,
     TraderAgent,
 )
-from main import fetch_external_knowledge
+from dl.predictor import DLEngine
+from main import _date_to_int, fetch_external_knowledge
 from memory.memory_bank import MemoryBank
 from rag.retriever import SimpleRAG
 
@@ -294,13 +295,13 @@ def fetch_history(ticker: str) -> pd.DataFrame:
     return df_hist
 
 
-def build_rag(ticker: str) -> SimpleRAG:
-    knowledge = fetch_external_knowledge(ticker)
+def build_rag(ticker: str, cutoff_date: str | None = None) -> SimpleRAG:
+    knowledge = fetch_external_knowledge(ticker, cutoff_date=cutoff_date)
     if not knowledge:
         knowledge = [
             {
                 "page_content": f"{ticker} 暂无可用新闻研报，建议降低新闻面权重。",
-                "metadata": {"date_int": 20991231, "ticker": ticker, "source": "fallback"},
+                "metadata": {"date_int": _date_to_int(cutoff_date) if cutoff_date else 20991231, "ticker": ticker, "source": "fallback"},
             }
         ]
     return SimpleRAG(data_sources=knowledge)
@@ -323,8 +324,9 @@ def generate_advice(ticker: str, debate_depth: int, human_comment: str = "", hum
     features = df_hist.tail(10)[FEATURE_COLUMNS].values
     latest = df_hist.iloc[-1]
 
-    rag_engine = build_rag(ticker)
-    technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师")
+    rag_engine = build_rag(ticker, cutoff_date=target_date)
+    dl_engine = DLEngine() if str(os.getenv("ENABLE_DL_ANALYST", "1")).strip() != "0" else None
+    technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师", dl_engine=dl_engine)
     fundamental_news_analyst = FundamentalNewsAnalyst(name="基本面新闻综合分析师", rag_engine=rag_engine)
     referee = GameReferee(name="无情裁判官", memory_bank=memory_bank)
     risk_manager = RiskManager(name="风控大脑", memory_bank=memory_bank)

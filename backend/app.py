@@ -10,6 +10,7 @@ from typing import Literal
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import (
@@ -28,23 +29,59 @@ from .config import (
 from .indexer import build_dashboard_summary
 from .services import (
     get_latest_advice_for_ticker,
+    get_market_ohlc_bars,
     list_recent_backtest_summaries,
+    resolve_evolution_tickers,
     run_daily_evolution,
     settle_advice_experience,
     run_initial_training,
     run_investment_advice,
+    _load_tickers_from_csv,
 )
 from .storage import ensure_web_index_dir, read_json, write_json
 from .tasks import TaskManager
 
+_PASSWORD_ITERATIONS = 210_000
+_DEFAULT_ALLOWED_ORIGINS = (
+    "http://127.0.0.1:8000,"
+    "http://localhost:8000,"
+    "http://127.0.0.1:5173,"
+    "http://localhost:5173"
+)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, lower: int = 1) -> int:
+    try:
+        return max(lower, int(str(os.getenv(name, str(default))).strip() or str(default)))
+    except ValueError:
+        return default
+
+
+def _parse_allowed_origins() -> list[str]:
+    raw = str(os.getenv("ALLOWED_ORIGINS", _DEFAULT_ALLOWED_ORIGINS)).strip()
+    if raw == "*":
+        return ["*"]
+    origins = [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
+    return origins or _DEFAULT_ALLOWED_ORIGINS.split(",")
+
+
+_ALLOWED_ORIGINS = _parse_allowed_origins()
+
 app = FastAPI(title="TradingAgents Web API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials="*" not in _ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
 task_manager = TaskManager()
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
@@ -67,6 +104,8 @@ class AdviceRequest(BaseModel):
 
 class EvolutionRequest(BaseModel):
     tickers: list[str] | None = None
+    csv_path: str | None = None
+    csv_top_n: int | None = Field(default=None, ge=1, le=500)
     debate_depth: int = Field(default=2, ge=1, le=6)
     mode: Literal["backtest_update", "advice_only"] = "backtest_update"
 
@@ -113,8 +152,45 @@ def _validate_register_payload(req: RegisterRequest) -> tuple[str, str]:
     return email, phone
 
 
-def _hash_password(raw_password: str, salt: str) -> str:
+def _legacy_hash_password(raw_password: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{raw_password}".encode("utf-8")).hexdigest()
+
+
+def _hash_password(raw_password: str, salt: str) -> str:
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        raw_password.encode("utf-8"),
+        salt.encode("utf-8"),
+        _PASSWORD_ITERATIONS,
+    ).hex()
+    return f"pbkdf2_sha256${_PASSWORD_ITERATIONS}${digest}"
+
+
+def _verify_password(raw_password: str, salt: str, expected_hash: str) -> bool:
+    expected = str(expected_hash or "")
+    if expected.startswith("pbkdf2_sha256$"):
+        try:
+            _, iterations_raw, digest = expected.split("$", 2)
+            iterations = int(iterations_raw)
+            actual = hashlib.pbkdf2_hmac(
+                "sha256",
+                raw_password.encode("utf-8"),
+                salt.encode("utf-8"),
+                iterations,
+            ).hex()
+            return secrets.compare_digest(actual, digest)
+        except Exception:
+            return False
+    return secrets.compare_digest(_legacy_hash_password(raw_password, salt), expected)
+
+
+def _is_path_under_base_dir(path: str) -> bool:
+    if _env_flag("ALLOW_EXTERNAL_CSV_PATHS", default=False):
+        return True
+    try:
+        return os.path.commonpath([BASE_DIR, os.path.abspath(path)]) == BASE_DIR
+    except ValueError:
+        return False
 
 
 def _resolve_train_csv_path(csv_path: str | None) -> str:
@@ -123,7 +199,48 @@ def _resolve_train_csv_path(csv_path: str | None) -> str:
         return TOP_HOLDINGS_CSV
     if not os.path.isabs(candidate):
         candidate = os.path.join(BASE_DIR, candidate)
-    return os.path.abspath(candidate)
+    resolved = os.path.abspath(candidate)
+    if not _is_path_under_base_dir(resolved):
+        raise HTTPException(status_code=400, detail="CSV 路径必须位于项目目录内。")
+    return resolved
+
+
+def _resolve_upload_csv_path(csv_path: str) -> str:
+    candidate = str(csv_path or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail="CSV 路径为空。")
+    if not os.path.isabs(candidate):
+        candidate = os.path.join(BASE_DIR, candidate)
+    resolved = os.path.abspath(candidate)
+    if not _is_path_under_base_dir(resolved):
+        raise HTTPException(status_code=400, detail="CSV 路径必须位于项目目录内。")
+    if not os.path.exists(resolved):
+        raise HTTPException(status_code=400, detail=f"CSV 文件不存在: {resolved}")
+    return resolved
+
+
+async def _save_uploaded_csv(file: UploadFile) -> tuple[str, str]:
+    filename = str(file.filename or "").strip()
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="仅支持上传 CSV 文件。")
+    os.makedirs(TRAIN_UPLOAD_DIR, exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename)[:120]
+    saved_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(3)}_{safe_name}"
+    saved_path = os.path.join(TRAIN_UPLOAD_DIR, saved_name)
+    max_upload_bytes = _env_int("MAX_UPLOAD_BYTES", 2 * 1024 * 1024)
+    content = bytearray()
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > max_upload_bytes:
+            raise HTTPException(status_code=413, detail=f"CSV 文件过大，最大允许 {max_upload_bytes} 字节。")
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空。")
+    with open(saved_path, "wb") as f:
+        f.write(bytes(content))
+    return os.path.abspath(saved_path), filename
 
 
 def _parse_time(raw: str) -> datetime:
@@ -349,6 +466,14 @@ def _get_session_user(authorization: str | None) -> tuple[dict, dict]:
     return session, user
 
 
+def _require_admin_password(raw_password: str | None) -> None:
+    required = str(os.getenv("ADMIN_PASSWORD", "") or "").strip()
+    if not required or required in {"123456", "admin", "password", "change_me_before_running"}:
+        raise HTTPException(status_code=503, detail="管理员密码未配置，请设置 ADMIN_PASSWORD。")
+    if not secrets.compare_digest(str(raw_password or ""), required):
+        raise HTTPException(status_code=403, detail="管理员认证失败。")
+
+
 @app.on_event("startup")
 def _startup() -> None:
     ensure_web_index_dir()
@@ -379,6 +504,9 @@ def _startup() -> None:
             replace_existing=True,
         )
         scheduler.start()
+    recovered = task_manager.recover_interrupted_tasks()
+    if recovered:
+        print(f"[startup] recovered {recovered} interrupted task(s)")
     build_dashboard_summary()
 
 
@@ -451,7 +579,7 @@ def auth_login(req: LoginRequest) -> dict:
         raise HTTPException(status_code=401, detail="账号或密码错误。")
     salt = str(user.get("password_salt", ""))
     expected = str(user.get("password_hash", ""))
-    if not salt or _hash_password(req.password, salt) != expected:
+    if not salt or not _verify_password(req.password, salt, expected):
         raise HTTPException(status_code=401, detail="账号或密码错误。")
 
     sessions = _cleanup_expired_sessions(_load_sessions())
@@ -521,9 +649,7 @@ def user_advice_evaluation(authorization: str | None = Header(default=None)) -> 
 
 @app.get("/api/admin/users")
 def admin_users(x_admin_password: str | None = Header(default=None, alias="X-Admin-Password")) -> dict:
-    required = str(os.getenv("ADMIN_PASSWORD", "123456"))
-    if str(x_admin_password or "") != required:
-        raise HTTPException(status_code=403, detail="管理员认证失败。")
+    _require_admin_password(x_admin_password)
     users = _load_users()
     rows = sorted(users, key=lambda x: x.get("created_at", ""), reverse=True)
     return {"users": [_to_public_user(u) for u in rows], "count": len(rows)}
@@ -551,46 +677,64 @@ def train_init(req: TrainingRequest) -> dict:
 
 @app.post("/api/train/upload-csv")
 async def train_upload_csv(file: UploadFile = File(...)) -> dict:
-    filename = str(file.filename or "").strip()
-    if not filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="仅支持上传 CSV 文件。")
-    os.makedirs(TRAIN_UPLOAD_DIR, exist_ok=True)
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename)[:120]
-    saved_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(3)}_{safe_name}"
-    saved_path = os.path.join(TRAIN_UPLOAD_DIR, saved_name)
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="上传文件为空。")
-    with open(saved_path, "wb") as f:
-        f.write(content)
+    saved_path, filename = await _save_uploaded_csv(file)
     return {
         "status": "ok",
-        "csv_path": os.path.abspath(saved_path),
+        "csv_path": saved_path,
         "filename": filename,
+    }
+
+
+@app.post("/api/evolution/upload-csv")
+async def evolution_upload_csv(file: UploadFile = File(...), top_n: int | None = None) -> dict:
+    saved_path, filename = await _save_uploaded_csv(file)
+    limit = top_n if top_n and top_n > 0 else None
+    tickers = _load_tickers_from_csv(saved_path, top_n=limit)
+    if not tickers:
+        raise HTTPException(status_code=400, detail="CSV 中未找到有效股票代码（需包含「股票代码」列）。")
+    return {
+        "status": "ok",
+        "csv_path": saved_path,
+        "filename": filename,
+        "tickers": tickers,
+        "count": len(tickers),
     }
 
 
 @app.post("/api/advice/run")
 def advice_run(req: AdviceRequest, authorization: str | None = Header(default=None)) -> dict:
-    payload = run_investment_advice(
-        base_dir=BASE_DIR,
-        ticker=req.ticker,
-        debate_depth=req.debate_depth,
-        human_comment=req.human_comment,
-        human_decision=req.human_decision,
-    )
+    user_id = ""
     token = _extract_bearer_token(authorization)
     if token:
         try:
             _, user = _get_session_user(authorization)
             user_id = str(user.get("user_id", ""))
-            ticker = _normalize_ticker(str(payload.get("ticker", "") or req.ticker))
-            if user_id and ticker:
-                _merge_user_advice_tickers(user_id, [ticker])
         except Exception:
-            # Advice generation itself should not fail due to history recording.
             pass
-    return payload
+
+    captured_user_id = user_id
+    captured_ticker = req.ticker
+
+    def _do_advice() -> dict:
+        payload = run_investment_advice(
+            base_dir=BASE_DIR,
+            ticker=captured_ticker,
+            debate_depth=req.debate_depth,
+            human_comment=req.human_comment,
+            human_decision=req.human_decision,
+        )
+        if captured_user_id:
+            ticker_val = _normalize_ticker(str(payload.get("ticker", "") or captured_ticker))
+            if ticker_val:
+                _merge_user_advice_tickers(captured_user_id, [ticker_val])
+        return payload
+
+    task_id = task_manager.run_background(
+        "investment_advice",
+        _do_advice,
+        lock_key=f"advice_{_normalize_ticker(req.ticker)}",
+    )
+    return {"task_id": task_id, "status": "queued"}
 
 
 @app.get("/api/advice/latest/{ticker}")
@@ -618,17 +762,44 @@ def agent_trace(ticker: str) -> dict:
 
 @app.post("/api/evolution/run")
 def evolution_run(req: EvolutionRequest) -> dict:
+    evolution_csv_path = None
+    if req.csv_path:
+        evolution_csv_path = _resolve_upload_csv_path(req.csv_path)
+    try:
+        preview_tickers = resolve_evolution_tickers(
+            tickers=req.tickers,
+            csv_path=evolution_csv_path,
+            csv_top_n=req.csv_top_n,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not preview_tickers:
+        raise HTTPException(status_code=400, detail="未指定有效股票列表。")
+
+    captured_tickers = req.tickers
+    captured_csv_path = evolution_csv_path
+    captured_csv_top_n = req.csv_top_n
+    captured_depth = req.debate_depth
+    captured_mode = req.mode
+
     task_id = task_manager.run_background(
         "daily_evolution_manual",
         lambda: run_daily_evolution(
             base_dir=BASE_DIR,
-            tickers=req.tickers,
-            debate_depth=req.debate_depth,
-            mode=req.mode,
+            tickers=captured_tickers,
+            debate_depth=captured_depth,
+            mode=captured_mode,
+            csv_path=captured_csv_path,
+            csv_top_n=captured_csv_top_n,
         ),
         lock_key="daily_evolution",
     )
-    return {"task_id": task_id, "status": "queued"}
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "ticker_count": len(preview_tickers),
+        "tickers_preview": preview_tickers[:20],
+    }
 
 
 @app.post("/api/evolution/settle-advice")
@@ -658,12 +829,18 @@ def get_task(task_id: str) -> dict:
 def dashboard_summary(refresh: bool = False) -> dict:
     if refresh:
         return build_dashboard_summary()
-    return read_json(INDEX_SUMMARY_PATH, build_dashboard_summary())
+    cached = read_json(INDEX_SUMMARY_PATH, None)
+    return cached if isinstance(cached, dict) else build_dashboard_summary()
 
 
 @app.get("/api/dashboard/backtests")
 def dashboard_backtests(limit: int = 20) -> dict:
     return {"runs": list_recent_backtest_summaries(limit=limit)}
+
+
+@app.get("/api/market/ohlc/{ticker}")
+def market_ohlc(ticker: str, limit: int = 40) -> dict:
+    return get_market_ohlc_bars(ticker=ticker, limit=limit)
 
 
 @app.get("/api/evolution/history")
@@ -676,7 +853,8 @@ def evolution_history(limit: int = 20) -> dict:
 
 
 @app.get("/api/system/files")
-def system_files() -> dict:
+def system_files(x_admin_password: str | None = Header(default=None, alias="X-Admin-Password")) -> dict:
+    _require_admin_password(x_admin_password)
     return {
         "base_dir": BASE_DIR,
         "tasks_path": TASKS_PATH,
@@ -686,8 +864,11 @@ def system_files() -> dict:
     }
 
 
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
-

@@ -210,6 +210,17 @@
               <span id="settlementStatsText" class="actions-meta">已兑现：- | 待兑现：-</span>
             </div>
           </div>
+          <div class="card">
+            <h3>进化标的来源</h3>
+            <div class="actions">
+              <span id="evolveSourceText" class="actions-meta">可手动输入逗号分隔代码，或导入 CSV（需含「股票代码」列）</span>
+              <input id="evolveCsvFileInput" type="file" accept=".csv,text/csv" />
+              <button id="uploadEvolveCsvBtn">导入CSV文件</button>
+            </div>
+            <div class="form-grid" style="margin-top: 10px">
+              <label>导入上限（可空=全部）<input id="evolveCsvTopN" type="number" min="1" max="500" placeholder="全部" /></label>
+            </div>
+          </div>
           <div class="form-grid">
             <label>股票列表（逗号分隔，可空）<input id="evolveTickers" placeholder="留空默认watchlist/top10" /></label>
             <label>博弈轮数<input id="evolveDepth" type="number" value="2" min="1" max="6" /></label>

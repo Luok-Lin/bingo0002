@@ -592,6 +592,66 @@ td {
   color: #b91c1c;
 }
 
+.advice-progress-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.advice-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.advice-progress-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.advice-progress-pct {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.advice-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.14);
+  overflow: hidden;
+  position: relative;
+}
+
+.inline-feedback.success.advice-progress-feedback .advice-progress-track {
+  background: rgba(5, 150, 105, 0.16);
+}
+
+.advice-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  transition: width 0.45s ease;
+}
+
+.inline-feedback.success.advice-progress-feedback .advice-progress-fill {
+  background: linear-gradient(90deg, #059669, #34d399);
+}
+
+.advice-progress-track.is-indeterminate .advice-progress-fill {
+  animation: advice-progress-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes advice-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 .summary-card.full-span {
   grid-column: 1 / -1;
 }

@@ -1,0 +1,43 @@
+import json
+import unittest
+
+from agents.llm_client import (
+    LLMClient,
+    LLMClientConfig,
+    extract_json_object,
+    is_valid_json_payload,
+    rule_based_fallback,
+)
+
+
+class LLMClientTests(unittest.TestCase):
+    def test_extract_json_object_from_markdown(self):
+        raw = "```json\n{\"sentiment\":\"neutral\", \"confidence\":0.5}\n```"
+        self.assertEqual(extract_json_object(raw), "{\"sentiment\":\"neutral\", \"confidence\":0.5}")
+
+    def test_schema_validation_requires_minimum_keys(self):
+        self.assertTrue(is_valid_json_payload('{"sentiment":"neutral","confidence":0.5}', ["sentiment", "confidence"]))
+        self.assertFalse(is_valid_json_payload('{"sentiment":"neutral"}', ["sentiment", "confidence", "reasoning"]))
+
+    def test_rule_fallback_is_json(self):
+        payload = json.loads(rule_based_fallback("上涨 突破 利好", "unit test"))
+        self.assertIn(payload["sentiment"], {"positive", "negative", "neutral"})
+        self.assertIn("confidence", payload)
+
+    def test_unconfigured_key_uses_fallback(self):
+        cfg = LLMClientConfig(
+            api_key="your_api_key_here",
+            base_url="https://example.invalid/v1",
+            model_name="test",
+            stable_mode=True,
+            json_retry=1,
+            timeout_seconds=5,
+            temperature=0.1,
+            top_p=0.2,
+        )
+        payload = json.loads(LLMClient(cfg).query("请判断：风险 承压", role="tester"))
+        self.assertIn("[规则降级]", payload["reasoning"])
+
+
+if __name__ == "__main__":
+    unittest.main()

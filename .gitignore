@@ -21,14 +21,23 @@ chroma_db/
 advanced_reflections_db/
 test_chroma/
 test_chroma2/
-data/vector_db/
+tests/test_chroma*/
+data/vector_db/*
+!data/vector_db/.gitkeep
+data/db/*
+!data/db/.gitkeep
 *.sqlite3
 *.db
+*.lock
 
 # Models
+data/models/*
+!data/models/.gitkeep
+models/weights/
 *.pth
 *.pt
 *.onnx
+*.scaler.pkl
 
 # IDEs and Editors
 .idea/
@@ -41,3 +50,25 @@ data/vector_db/
 
 # Local JSON Logs
 data/json/reflections.json
+data/json/financial_cache.json
+data/json/backups/
+data/investment_advice/*
+!data/investment_advice/.gitkeep
+data/monitoring/*
+!data/monitoring/.gitkeep
+!data/monitoring/backtest_runs/
+data/monitoring/backtest_runs/*
+!data/monitoring/backtest_runs/.gitkeep
+!data/monitoring/portfolio_training/
+data/monitoring/portfolio_training/*
+!data/monitoring/portfolio_training/.gitkeep
+!data/monitoring/uploads/
+data/monitoring/uploads/*
+!data/monitoring/uploads/.gitkeep
+!data/monitoring/web_index/
+data/monitoring/web_index/*
+!data/monitoring/web_index/.gitkeep
+data/reward_tuning_reports/*
+!data/reward_tuning_reports/.gitkeep
+logs/
+*.pid

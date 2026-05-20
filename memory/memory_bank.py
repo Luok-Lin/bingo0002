@@ -3,12 +3,13 @@ import os
 import datetime
 from .db_middleware import DatabaseMiddleware
 from rl.reward import compute_trade_reward
+from rag.embedding_factory import get_embedding_function, resolve_embedding_model
 try:
     from langchain_chroma import Chroma
-    from langchain_community.embeddings import HuggingFaceEmbeddings
     from langchain_core.documents import Document
 except ImportError:
-    pass
+    Chroma = None
+    Document = None
 
 class MemoryBank:
     """长期记忆与知识库，包含关系型数据库双写与向量RAG检索引擎"""
@@ -42,30 +43,13 @@ class MemoryBank:
         
         # 向量知识库初始化 (高维空间存储)
         print("[MemoryBank] 正在初始化 HuggingFace Embeddings 与 ChromaDB 以支持记忆 RAG...")
-        # 强制使得 langchain/huggingface 不去走被封的大陆直连或者受到无代理影响
-        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-        
+
         try:
-            # Preferred import path for new LangChain helper package
-            try:
-                from langchain_huggingface import HuggingFaceEmbeddings as _HFE
-            except Exception:
-                from langchain_community.embeddings import HuggingFaceEmbeddings as _HFE
-
-            # 动态寻找本地模型路径
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            local_model_base = os.path.join(base_dir, "data", "models", "all-MiniLM-L6-v2", "models--sentence-transformers--all-MiniLM-L6-v2", "snapshots")
-            model_name_or_path = "sentence-transformers/all-MiniLM-L6-v2"
-            
-            model_kwargs = {}
-            if os.path.exists(local_model_base):
-                snapshots = [d for d in os.listdir(local_model_base) if os.path.isdir(os.path.join(local_model_base, d))]
-                if snapshots:
-                    model_name_or_path = os.path.join(local_model_base, snapshots[0])
-                    model_kwargs = {'local_files_only': True}
-                    print(f"[MemoryBank] 使用本地模型: {model_name_or_path}")
-
-            self.embeddings = _HFE(model_name=model_name_or_path, model_kwargs=model_kwargs)
+            if Chroma is None:
+                raise RuntimeError("langchain_chroma 未能导入")
+            model_name_or_path, _ = resolve_embedding_model()
+            print(f"[MemoryBank] Embedding 模型: {model_name_or_path}")
+            self.embeddings = get_embedding_function()
             self.vector_store = Chroma(
                 collection_name="agent_experiences",
                 embedding_function=self.embeddings,

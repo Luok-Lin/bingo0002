@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
+import os
+import pickle
 from sklearn.preprocessing import StandardScaler
 
 class StockTrendPredictor(nn.Module):
@@ -25,21 +27,37 @@ class DLEngine:
         self.model = StockTrendPredictor(input_size=10, hidden_layer_size=64, output_size=1)
         
         # 解析绝对路径
-        import os
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.weight_path = os.path.join(base_dir, weight_path) if not os.path.isabs(weight_path) else weight_path
+        self.scaler_path = f"{self.weight_path}.scaler.pkl"
         
         self.scaler = StandardScaler()
         self._load_or_init_weights()
+        self._load_scaler()
 
     def _load_or_init_weights(self):
-        import os
+        os.makedirs(os.path.dirname(self.weight_path), exist_ok=True)
         if os.path.exists(self.weight_path):
-            self.model.load_state_dict(torch.load(self.weight_path))
+            self.model.load_state_dict(torch.load(self.weight_path, map_location="cpu"))
             print(f"[DL Engine] 深度学习预测模型权重 [{self.weight_path}] 加载成功.")
         else:
             print("[DL Engine] 未发现预训练权重，随机初始化...")
             torch.save(self.model.state_dict(), self.weight_path)
+
+    def _load_scaler(self):
+        if not os.path.exists(self.scaler_path):
+            return
+        try:
+            with open(self.scaler_path, "rb") as f:
+                self.scaler = pickle.load(f)
+            print(f"[DL Engine] 标准化器 [{self.scaler_path}] 加载成功.")
+        except Exception as exc:
+            print(f"[DL Engine] 标准化器加载失败，将在预测时临时拟合: {exc}")
+
+    def _save_scaler(self):
+        os.makedirs(os.path.dirname(self.scaler_path), exist_ok=True)
+        with open(self.scaler_path, "wb") as f:
+            pickle.dump(self.scaler, f)
 
     def train_on_history(self, df_hist: pd.DataFrame, window_size=10, epochs=20, lr=0.005):
         """真实使用前置历史数据训练网络"""
@@ -109,6 +127,7 @@ class DLEngine:
         # 持久化到 CPU 兼容的状态字典
         self.model.to('cpu')
         torch.save(self.model.state_dict(), self.weight_path)
+        self._save_scaler()
         print(f"[DL Engine] 模型使用真实数据微调完毕，已保存至 {self.weight_path}")
 
     def predict(self, ticker: str, features: np.ndarray) -> dict:

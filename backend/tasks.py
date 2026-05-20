@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+import os
 from datetime import datetime
 from typing import Callable
 
@@ -21,6 +22,11 @@ class TaskManager:
         return tasks if isinstance(tasks, list) else []
 
     def _save_tasks(self, tasks: list[dict]) -> None:
+        try:
+            history_limit = max(50, int(str(os.getenv("TASK_HISTORY_LIMIT", "500")).strip() or "500"))
+        except ValueError:
+            history_limit = 500
+        tasks = sorted(tasks, key=lambda x: x.get("created_at", ""))[-history_limit:]
         write_json(TASKS_PATH, tasks)
 
     def _append_task(self, task: dict) -> None:
@@ -48,6 +54,26 @@ class TaskManager:
             if task.get("task_id") == task_id:
                 return task
         return None
+
+    def recover_interrupted_tasks(self, message: str = "服务重启导致任务中断，请重新生成。") -> int:
+        """Mark orphaned running/queued tasks as failed after API restart."""
+        recovered = 0
+        with self._lock:
+            tasks = self._load_tasks()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for task in tasks:
+                if str(task.get("status", "")).lower() not in {"running", "queued"}:
+                    continue
+                task["status"] = "failed"
+                task["ended_at"] = now
+                task["message"] = message
+                lock_key = str(task.get("lock_key", "") or "")
+                if lock_key:
+                    self._running_keys.discard(lock_key)
+                recovered += 1
+            if recovered:
+                self._save_tasks(tasks)
+        return recovered
 
     def run_background(self, task_type: str, fn: TaskCallable, lock_key: str | None = None) -> str:
         task_id = str(uuid.uuid4())
@@ -107,4 +133,3 @@ class TaskManager:
 
         threading.Thread(target=_runner, daemon=True).start()
         return task_id
-

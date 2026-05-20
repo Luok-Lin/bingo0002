@@ -1,10 +1,17 @@
 const resolveDefaultApiBase = () => {
-  const host = String(window.location.hostname || "").trim();
+  const { protocol, hostname, port } = window.location;
+  const host = String(hostname || "").trim();
   if (!host) return "http://127.0.0.1:8000";
-  return `${window.location.protocol}//${host}:8000`;
+  // 后端已托管 frontend/ 时走同源，避免跨域与错误端口
+  if (port === "8000" || port === "") {
+    return `${protocol}//${host}${port ? `:${port}` : ""}`;
+  }
+  return `${protocol}//${host}:8000`;
 };
 const API_BASE = window.localStorage.getItem("apiBase") || resolveDefaultApiBase();
 const API_TIMEOUT_MS = 15000;
+const ADVICE_API_TIMEOUT_MS = 60000;
+const ADVICE_POLL_MAX_WAIT_MS = 600000;
 const ADMIN_PASSWORD = window.localStorage.getItem("adminPassword") || "123456";
 const MODE_USER = "user";
 const MODE_ADMIN = "admin";
@@ -18,6 +25,7 @@ const DEFAULT_TRAIN_SOURCE_TEXT = "默认文件：个人_持股排名.csv";
 let currentUser = null;
 let authToken = "";
 let selectedTrainCsvPath = "";
+let selectedEvolveCsvPath = "";
 let settleAdviceSubmitting = false;
 let settleAdviceTaskActive = false;
 let settleTaskPollTimer = null;
@@ -134,6 +142,21 @@ const uniqueReasonText = (...texts) => {
 };
 
 const buildRoundNote = (judge = {}, sideA = {}, sideB = {}) => {
+  const fusion = String(judge.fusion_strategy || "").trim();
+  const layers = judge.consensus_layers || {};
+  const layerBits = [
+    layers.argument_clash,
+    layers.constraint_binding,
+    layers.weight_balance,
+  ]
+    .map((x) => cleanText(x))
+    .filter(Boolean);
+  if (fusion || layerBits.length) {
+    const head = fusion ? `【${fusion}】` : "【合作博弈共识】";
+    const body = layerBits.length ? layerBits.join("；") : "";
+    return toBriefReason(`${head}${body}`, "", 110);
+  }
+
   const judgeReason = uniqueReasonText(judge.reason || judge.reasoning || judge.commentary || judge.note || "");
   const judgeBrief = toBriefReason(judgeReason, "", 96);
   if (judgeBrief && judgeBrief !== "-") return judgeBrief;
@@ -324,6 +347,32 @@ function setAdviceFeedback(type, text) {
   el.classList.remove("hidden");
 }
 
+const adviceProgressFromElapsed = (elapsedMs) => {
+  const ratio = Math.max(0, elapsedMs) / ADVICE_POLL_MAX_WAIT_MS;
+  return Math.min(92, Math.round((1 - Math.exp(-3.2 * ratio)) * 92));
+};
+
+function setAdviceProgress(type, message, percent = null) {
+  const el = document.getElementById("adviceFeedback");
+  if (!el) return;
+  const pct = Number.isFinite(Number(percent)) ? Math.max(0, Math.min(100, Number(percent))) : null;
+  const label = escapeHtml(String(message || "正在处理…"));
+  const indeterminate = pct === null;
+  const width = indeterminate ? "35%" : `${pct}%`;
+  const pctLabel = indeterminate ? "进行中" : `${Math.round(pct)}%`;
+  el.className = `inline-feedback advice-progress-feedback ${type}`;
+  el.innerHTML = `
+    <div class="advice-progress-head">
+      <span class="advice-progress-label">${label}</span>
+      <span class="advice-progress-pct">${pctLabel}</span>
+    </div>
+    <div class="advice-progress-track${indeterminate ? " is-indeterminate" : ""}">
+      <div class="advice-progress-fill" style="width:${width}"></div>
+    </div>
+  `;
+  el.classList.remove("hidden");
+}
+
 function setAdviceBusy(busy, runText = "生成建议", loadText = "读取最新建议") {
   const runBtn = document.getElementById("runAdviceBtn");
   const loadBtn = document.getElementById("loadLatestAdviceBtn");
@@ -359,6 +408,41 @@ function updateTrainSourceText() {
     return;
   }
   el.textContent = `当前文件：${selectedTrainCsvPath}`;
+}
+
+function updateEvolveSourceText(count = null) {
+  const el = document.getElementById("evolveSourceText");
+  if (!el) return;
+  if (!selectedEvolveCsvPath) {
+    el.textContent = "可手动输入逗号分隔代码，或导入 CSV（需含「股票代码」列）";
+    return;
+  }
+  const suffix = count === null ? "" : `，共 ${count} 只股票`;
+  el.textContent = `当前文件：${selectedEvolveCsvPath}${suffix}`;
+}
+
+function parseEvolutionTickersInput(raw = "") {
+  return Array.from(
+    new Set(
+      String(raw || "")
+        .split(/[,，;\s\n]+/)
+        .map((x) => normalizeTicker(x))
+        .filter(Boolean)
+    )
+  );
+}
+
+function buildEvolutionPayload() {
+  const tickers = parseEvolutionTickersInput(document.getElementById("evolveTickers")?.value || "");
+  const topNRaw = String(document.getElementById("evolveCsvTopN")?.value || "").trim();
+  const csvTopN = topNRaw ? Number(topNRaw) : null;
+  return {
+    tickers: tickers.length ? tickers : null,
+    csv_path: !tickers.length && selectedEvolveCsvPath ? selectedEvolveCsvPath : null,
+    csv_top_n: csvTopN && Number.isFinite(csvTopN) && csvTopN > 0 ? csvTopN : null,
+    debate_depth: Number(document.getElementById("evolveDepth")?.value || 2),
+    mode: document.getElementById("evolveMode")?.value || "backtest_update",
+  };
 }
 
 function renderSettlementStats(stats = {}) {
@@ -702,6 +786,52 @@ function renderFlowChart(data) {
   `;
 }
 
+const formatFetchError = (error, path = "") => {
+  const raw = String((error && error.message) || error || "");
+  if (error && error.name === "AbortError") {
+    return `请求超时：${path || "API"}。建议生成耗时较长，请确认后端仍在运行后重试。`;
+  }
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) {
+    return `无法连接后端 API（${API_BASE}）。请先执行：uvicorn backend.app:app --host 127.0.0.1 --port 8000，并打开 http://127.0.0.1:8000`;
+  }
+  return raw || "未知网络错误";
+};
+
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+async function pollAdviceTask(taskId) {
+  const startTime = Date.now();
+  let consecutiveNetworkErrors = 0;
+  while (Date.now() - startTime < ADVICE_POLL_MAX_WAIT_MS) {
+    await sleep(3000);
+    try {
+      const task = await api(`/api/tasks/${taskId}`, { timeout_ms: ADVICE_API_TIMEOUT_MS });
+      consecutiveNetworkErrors = 0;
+      if (task.status === "done" || task.status === "failed" || task.status === "skipped") {
+        return task;
+      }
+      const elapsedMs = Date.now() - startTime;
+      const elapsedSec = Math.round(elapsedMs / 1000);
+      const pct = adviceProgressFromElapsed(elapsedMs);
+      setAdviceProgress("info", `建议生成中（约 ${elapsedSec}s）`, pct);
+    } catch (e) {
+      if (/failed to fetch|network|超时|timeout/i.test(String(e.message || ""))) {
+        consecutiveNetworkErrors += 1;
+        if (consecutiveNetworkErrors <= 10) {
+          setAdviceProgress(
+            "info",
+            `后端短暂不可达，正在重试（${consecutiveNetworkErrors}/10）`,
+            null
+          );
+          continue;
+        }
+      }
+      throw e;
+    }
+  }
+  return null;
+}
+
 async function api(path, options = {}) {
   const timeoutMs =
     Number.isFinite(Number(options.timeout_ms)) && Number(options.timeout_ms) > 0
@@ -734,10 +864,7 @@ async function api(path, options = {}) {
   try {
     res = await fetch(`${API_BASE}${path}`, fetchOptions);
   } catch (e) {
-    if (e && e.name === "AbortError") {
-      throw new Error(`请求超时（${timeoutMs}ms）：${path}`);
-    }
-    throw e;
+    throw new Error(formatFetchError(e, path));
   } finally {
     if (timeoutId !== null) window.clearTimeout(timeoutId);
   }
@@ -1331,6 +1458,7 @@ function renderStabilityPanel(data) {
 }
 
 function clearAdvicePanelsForGenerating() {
+  setAdviceProgress("info", "正在生成建议…", 15);
   document.getElementById("signalAction").innerHTML = "-";
   document.getElementById("signalPosition").textContent = "-";
   document.getElementById("signalConfidence").textContent = "-";
@@ -1479,10 +1607,21 @@ async function renderTraceFromAdvice(data) {
   );
 
   if (ticker) {
-    const backtests = await api("/api/dashboard/backtests?limit=50");
-    const runs = backtests.runs || [];
-    const targetRun = runs.find((r) => padTicker(r.ticker) === padTicker(ticker));
-    const candles = buildMiniCandles((targetRun && targetRun.rows ? targetRun.rows : []).slice(-40));
+    let candles = [];
+    try {
+      const ohlc = await api(`/api/market/ohlc/${padTicker(ticker)}?limit=40`, {
+        timeout_ms: ADVICE_API_TIMEOUT_MS,
+      });
+      candles = buildMiniCandles(ohlc.bars || []);
+    } catch {
+      candles = [];
+    }
+    if (candles.length < 2) {
+      const backtests = await api("/api/dashboard/backtests?limit=50");
+      const runs = backtests.runs || [];
+      const targetRun = runs.find((r) => padTicker(r.ticker) === padTicker(ticker));
+      candles = buildMiniCandles((targetRun && targetRun.rows ? targetRun.rows : []).slice(-40));
+    }
     drawMiniKline(document.getElementById("miniPnlChart"), candles);
   } else {
     drawMiniKline(document.getElementById("miniPnlChart"), []);
@@ -1522,17 +1661,57 @@ async function uploadTrainCsv() {
   setStatus(`CSV上传成功：${data.filename || file.name}`);
 }
 
+async function ensureBackendReady() {
+  try {
+    await api("/api/health", { timeout_ms: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function runAdvice() {
   setStatus("生成建议中...");
   setAdviceBusy(true, "生成中...", "请稍候...");
-  setAdviceFeedback("info", "请求已发送，正在生成建议，请稍候...");
+  setAdviceProgress("info", "正在检查后端连接…", 5);
+  const backendOk = await ensureBackendReady();
+  if (!backendOk) {
+    setAdviceFeedback(
+      "error",
+      `后端未运行（${API_BASE}）。请在项目目录终端执行：uvicorn backend.app:app --host 127.0.0.1 --port 8000，然后打开 http://127.0.0.1:8000`
+    );
+    setAdviceBusy(false);
+    setStatus("后端未连接", "error");
+    return;
+  }
+  setAdviceProgress("info", "正在提交建议任务…", 12);
   clearAdvicePanelsForGenerating();
   try {
     const payload = {
       ticker: document.getElementById("adviceTicker").value.trim(),
       debate_depth: Number(document.getElementById("adviceDepth").value || 2),
     };
-    const data = await api("/api/advice/run", { method: "POST", body: JSON.stringify(payload) });
+    const submitData = await api("/api/advice/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      timeout_ms: ADVICE_API_TIMEOUT_MS,
+    });
+    const taskId = submitData.task_id;
+    if (!taskId) throw new Error("后端未返回 task_id，请检查后端版本。");
+    setAdviceProgress("info", `任务已提交，正在生成建议…`, 18);
+
+    const task = await pollAdviceTask(taskId);
+    if (!task) {
+      throw new Error("建议生成超时（10分钟），请稍后在任务列表中查看结果。");
+    }
+    if (task.status === "failed") {
+      throw new Error(task.message || "建议生成任务失败，请检查后端日志。");
+    }
+    if (task.status === "skipped") {
+      throw new Error("同一股票的建议任务正在运行中，请稍后重试。");
+    }
+
+    const data = task.result || {};
     const runResult = data.run_result || {};
     if (runResult.returncode !== undefined && Number(runResult.returncode) !== 0) {
       const errText = cleanText(runResult.stderr || runResult.stdout || "建议脚本执行失败");
@@ -1543,6 +1722,7 @@ async function runAdvice() {
       throw new Error("建议结果为空或字段不完整，请检查后端日志。");
     }
     rememberUserAdvice(advice);
+    setAdviceProgress("success", "生成完成，正在渲染结果…", 100);
     renderAdviceSummary(advice);
     await renderTraceFromAdvice(advice);
     setAdviceFeedback("success", `生成成功：${padTicker(advice.ticker || payload.ticker)} 建议已更新。`);
@@ -1579,16 +1759,36 @@ async function loadLatestAdvice() {
   }
 }
 
+async function uploadEvolveCsv() {
+  const input = document.getElementById("evolveCsvFileInput");
+  if (!input || !input.files || !input.files.length) {
+    setStatus("请先选择 CSV 文件。");
+    return;
+  }
+  const file = input.files[0];
+  const form = new FormData();
+  form.append("file", file);
+  const topNRaw = String(document.getElementById("evolveCsvTopN")?.value || "").trim();
+  const topN = topNRaw ? Number(topNRaw) : null;
+  const query = topN && Number.isFinite(topN) && topN > 0 ? `?top_n=${Math.floor(topN)}` : "";
+  setStatus("正在导入进化标的 CSV...");
+  const data = await api(`/api/evolution/upload-csv${query}`, { method: "POST", body: form });
+  selectedEvolveCsvPath = String(data.csv_path || "");
+  const tickers = Array.isArray(data.tickers) ? data.tickers.map((x) => normalizeTicker(x)).filter(Boolean) : [];
+  const evolveInput = document.getElementById("evolveTickers");
+  if (evolveInput) {
+    evolveInput.value = tickers.join(",");
+  }
+  updateEvolveSourceText(data.count ?? tickers.length);
+  setStatus(`CSV 导入成功：${data.count ?? tickers.length} 只股票`);
+}
+
 async function runEvolution() {
   setStatus("提交自进化任务...");
-  const tickersRaw = document.getElementById("evolveTickers").value.trim();
-  const payload = {
-    tickers: tickersRaw ? tickersRaw.split(",").map((x) => x.trim()).filter(Boolean) : null,
-    debate_depth: Number(document.getElementById("evolveDepth").value || 2),
-    mode: document.getElementById("evolveMode").value,
-  };
+  const payload = buildEvolutionPayload();
   const data = await api("/api/evolution/run", { method: "POST", body: JSON.stringify(payload) });
-  setStatus(`自进化任务已提交: ${data.task_id}`);
+  const countHint = data.ticker_count ? `（${data.ticker_count} 只）` : "";
+  setStatus(`自进化任务已提交${countHint}: ${data.task_id}`);
   await refreshTasks();
 }
 
@@ -1760,6 +1960,12 @@ const bindEvent = (id, event, handler) => {
 bindEvent("refreshOverviewBtn", "click", () => refreshOverview().catch((e) => setStatus(`错误: ${e.message}`)));
 bindEvent("runTrainingBtn", "click", () => runTraining().catch((e) => setStatus(`错误: ${e.message}`)));
 bindEvent("uploadTrainCsvBtn", "click", () => uploadTrainCsv().catch((e) => setStatus(`错误: ${e.message}`)));
+bindEvent("uploadEvolveCsvBtn", "click", () => uploadEvolveCsv().catch((e) => setStatus(`错误: ${e.message}`)));
+bindEvent("evolveCsvFileInput", "change", () => {
+  const input = document.getElementById("evolveCsvFileInput");
+  if (!input || !input.files || !input.files.length) return;
+  setStatus(`已选择文件：${input.files[0].name}，点击“导入CSV文件”后生效。`);
+});
 bindEvent("trainCsvFileInput", "change", () => {
   const input = document.getElementById("trainCsvFileInput");
   if (!input || !input.files || !input.files.length) return;
@@ -1813,6 +2019,7 @@ async function bootstrap() {
     if (!isLoggedIn) return;
     await loadUserAdviceHistoryFromServer();
     applyMode(currentMode, currentMode === MODE_ADMIN ? "training" : "advice");
+    updateEvolveSourceText();
     await api("/api/health");
     await refreshOverview();
     await refreshTasks();
