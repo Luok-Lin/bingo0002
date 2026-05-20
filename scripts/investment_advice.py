@@ -22,8 +22,6 @@ from agents.roles import (
     TechnicalFlowAnalyst,
     TraderAgent,
 )
-from dl.predictor import DLEngine
-from main import _date_to_int, fetch_external_knowledge
 from memory.memory_bank import MemoryBank
 from rag.retriever import SimpleRAG
 
@@ -42,6 +40,108 @@ def _normalize_action(value: str) -> str:
     if "SELL" in token:
         return "SELL"
     return "HOLD"
+
+
+def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+    try:
+        num = float(value)
+    except Exception:
+        num = low
+    return max(low, min(high, num))
+
+
+def _quality_level(score: float) -> str:
+    if score >= 0.75:
+        return "high"
+    if score >= 0.55:
+        return "medium"
+    return "low"
+
+
+def _days_since_iso(value: str) -> int | None:
+    text = str(value or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        dt = datetime.strptime(text, "%Y-%m-%d")
+        return max(0, (datetime.now() - dt).days)
+    except Exception:
+        return None
+
+
+def _date_to_int(value, default: int = 20000101) -> int:
+    try:
+        return int(str(value)[:10].replace("-", ""))
+    except Exception:
+        return default
+
+
+def fetch_external_knowledge_for_advice(ticker: str, cutoff_date: str | None = None) -> list[dict]:
+    """Fetch news/research evidence without importing the backtest entrypoint."""
+    import concurrent.futures
+
+    ticker = str(ticker).strip().zfill(6)
+    real_news_kb: list[dict] = []
+    cutoff_int = _date_to_int(cutoff_date, default=99991231) if cutoff_date else None
+
+    def fetch_news():
+        news_items = []
+        news_df = ak.stock_news_em(symbol=ticker)
+        if news_df is None:
+            return news_items, 0
+        for _, row in news_df.head(100).iterrows():
+            pub_time = str(row.get("发布时间", "2000-01-01"))
+            date_int = _date_to_int(pub_time)
+            if cutoff_int and date_int > cutoff_int:
+                continue
+            news_items.append(
+                {
+                    "page_content": "[外围资讯] " + str(row.get("新闻标题", "")) + " : " + str(row.get("新闻内容", "")),
+                    "metadata": {"date_int": date_int, "ticker": ticker, "source": "news"},
+                }
+            )
+        return news_items, len(news_df)
+
+    def fetch_reports():
+        report_items = []
+        report_df = ak.stock_research_report_em(symbol=ticker)
+        if report_df is not None and not report_df.empty:
+            for _, row in report_df.iterrows():
+                pub_time = str(row.get("日期", "2000-01-01"))
+                date_int = _date_to_int(pub_time)
+                if cutoff_int and date_int > cutoff_int:
+                    continue
+                content = (
+                    f"[券商研报] 机构: {row.get('机构', '未知')} | "
+                    f"评级: {row.get('东财评级', '未知')} | 核心观点摘要: {row.get('报告名称', '')}"
+                )
+                report_items.append(
+                    {
+                        "page_content": content,
+                        "metadata": {"date_int": date_int, "ticker": ticker, "source": "report"},
+                    }
+                )
+        return report_items, 0 if report_df is None else len(report_df)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_news = executor.submit(fetch_news)
+        future_reports = executor.submit(fetch_reports)
+
+        try:
+            news_items, news_count = future_news.result()
+            real_news_kb.extend(news_items)
+            print(f"成功攫取 {news_count} 条关于 {ticker} 的近期新闻。")
+        except Exception as exc:
+            print(f"新闻抓取受限: {exc}")
+
+        try:
+            report_items, report_count = future_reports.result()
+            real_news_kb.extend(report_items)
+            print(f"成功攫取 {report_count} 份专业研报注入向知识库。")
+        except Exception as exc:
+            print(f"研报提取遭遇阻碍: {exc}")
+
+    return real_news_kb
 
 
 def _stable_cache_path(ticker: str, as_of_date: str) -> str:
@@ -177,6 +277,158 @@ def _compute_stability(advice: dict) -> dict:
     }
 
 
+def _assess_analyst_evidence(technical_case: dict, fundamental_case: dict) -> dict:
+    reports: list[dict] = []
+    for case in [technical_case or {}, fundamental_case or {}]:
+        for report in case.get("source_reports", []) or []:
+            if isinstance(report, dict):
+                reports.append(report)
+
+    parse_fail_count = sum(1 for r in reports if r.get("_parse_ok") is False)
+    low_confidence_count = 0
+    neutral_count = 0
+    for item in [technical_case or {}, fundamental_case or {}, *reports]:
+        try:
+            if float(item.get("confidence", 0.5) or 0.5) < 0.3:
+                low_confidence_count += 1
+        except Exception:
+            pass
+        if str(item.get("sentiment", "")).lower() == "neutral":
+            neutral_count += 1
+
+    return {
+        "source_report_count": len(reports),
+        "parse_fail_count": parse_fail_count,
+        "low_confidence_count": low_confidence_count,
+        "neutral_count": neutral_count,
+    }
+
+
+def assess_data_quality(
+    *,
+    market_diagnostics: dict,
+    rag_diagnostics: dict,
+    technical_case: dict | None = None,
+    fundamental_case: dict | None = None,
+) -> dict:
+    market = dict(market_diagnostics or {})
+    rag = dict(rag_diagnostics or {})
+    analyst = _assess_analyst_evidence(technical_case or {}, fundamental_case or {})
+    diagnostics: list[str] = []
+
+    rows = int(market.get("rows") or 0)
+    market_score = 0.25 + min(0.45, rows / 260.0 * 0.45)
+    if rows >= 120:
+        market_score += 0.15
+    elif rows < 60:
+        diagnostics.append("行情样本少于60条")
+    freshness_days = market.get("freshness_days")
+    if freshness_days is not None:
+        if freshness_days <= 5:
+            market_score += 0.1
+        elif freshness_days > 30:
+            market_score -= 0.12
+            diagnostics.append("行情日期偏旧")
+    if market.get("fallback_used"):
+        market_score -= 0.25
+        diagnostics.append("行情使用本地回测兜底")
+    market_score = _clamp(market_score)
+
+    doc_count = int(rag.get("documents") or 0)
+    source_types = rag.get("source_types") or {}
+    real_sources = {k: v for k, v in source_types.items() if k != "fallback" and int(v or 0) > 0}
+    rag_score = min(0.6, doc_count / 8.0 * 0.6)
+    rag_score += min(0.2, len(real_sources) * 0.1)
+    rag_freshness_days = rag.get("freshness_days")
+    if rag_freshness_days is not None and not rag.get("fallback_used"):
+        if rag_freshness_days <= 30:
+            rag_score += 0.1
+        elif rag_freshness_days > 90:
+            rag_score -= 0.1
+            diagnostics.append("新闻研报证据偏旧")
+    if rag.get("fallback_used"):
+        rag_score = min(rag_score, 0.25)
+        diagnostics.append("新闻研报使用兜底文本")
+    rag_score = _clamp(rag_score)
+
+    analyst_score = 0.75
+    analyst_score -= min(0.24, analyst["parse_fail_count"] * 0.08)
+    analyst_score -= min(0.24, analyst["low_confidence_count"] * 0.06)
+    analyst_score -= min(0.18, analyst["neutral_count"] * 0.03)
+    if analyst["parse_fail_count"]:
+        diagnostics.append("存在LLM结构化解析失败")
+    if analyst["low_confidence_count"]:
+        diagnostics.append("存在低置信度子模块")
+    analyst_score = _clamp(analyst_score)
+
+    score = round(_clamp(market_score * 0.45 + rag_score * 0.35 + analyst_score * 0.20), 4)
+    if not diagnostics:
+        diagnostics.append("主要数据链路正常")
+    note_map = {
+        "high": "数据质量较高，证据覆盖可支撑当前建议。",
+        "medium": "数据质量中等，建议结合盘口与后续公告复核。",
+        "low": "数据质量偏低，已降低建议置信度与仓位权重。",
+    }
+    level = _quality_level(score)
+    return {
+        "score": score,
+        "level": level,
+        "note": note_map[level],
+        "market": market,
+        "rag": rag,
+        "analyst": analyst,
+        "diagnostics": diagnostics[:6],
+        "components": {
+            "market_score": round(market_score, 4),
+            "rag_score": round(rag_score, 4),
+            "analyst_score": round(analyst_score, 4),
+        },
+    }
+
+
+def calibrate_recommendation_by_quality(recommendation: dict, risk: dict, data_quality: dict) -> dict:
+    calibrated = dict(recommendation or {})
+    score = _clamp((data_quality or {}).get("score", 0.5))
+    action = _normalize_action(calibrated.get("action"))
+    original_confidence = float(calibrated.get("confidence", 0.5) or 0.5)
+    original_position = float(calibrated.get("position_percent", 0.0) or 0.0)
+
+    confidence_cap = 1.0
+    position_cap = 100.0
+    adjustments: list[str] = []
+    if score < 0.45:
+        confidence_cap = 0.55
+        position_cap = 20.0
+        adjustments.append("数据质量低，置信度上限0.55、方向性仓位上限20%。")
+    elif score < 0.60:
+        confidence_cap = 0.68
+        position_cap = 35.0
+        adjustments.append("数据质量中低，置信度上限0.68、方向性仓位上限35%。")
+
+    if adjustments and action in {"BUY", "SELL"}:
+        calibrated["confidence"] = round(min(original_confidence, confidence_cap), 4)
+        calibrated["position_percent"] = round(min(original_position, position_cap), 2)
+        calibrated["execution_action"] = (
+            f"{action} {calibrated['position_percent']}%"
+            if calibrated["position_percent"] > 0
+            else action
+        )
+        if risk is not None:
+            risk["position_percent"] = calibrated["position_percent"]
+            risk["quality_adjusted"] = True
+            risk["reason"] = f"{risk.get('reason', '')} | 数据质量校准: {' '.join(adjustments)}".strip()
+    else:
+        calibrated["confidence"] = round(original_confidence, 4)
+        calibrated["position_percent"] = round(original_position, 2)
+
+    note = (data_quality or {}).get("note", "")
+    if adjustments:
+        note = f"{note} {' '.join(adjustments)}".strip()
+    calibrated["data_quality_note"] = note
+    calibrated["quality_adjustments"] = adjustments
+    return calibrated
+
+
 def _validate_advice_payload(advice: dict) -> list[str]:
     errors: list[str] = []
     rec = advice.get("recommendation", {}) or {}
@@ -211,7 +463,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def fetch_history(ticker: str) -> pd.DataFrame:
+def fetch_history_with_diagnostics(ticker: str) -> tuple[pd.DataFrame, dict]:
+    ticker = str(ticker).strip().zfill(6)
+
     def _finalize(df_raw: pd.DataFrame) -> pd.DataFrame:
         df_hist = df_raw.copy()
         df_hist["日期"] = pd.to_datetime(df_hist["日期"]).dt.strftime("%Y-%m-%d")
@@ -273,6 +527,9 @@ def fetch_history(ticker: str) -> pd.DataFrame:
 
     prefix = "sh" if ticker.startswith("6") else "sz"
     prefixed = f"{prefix}{ticker}"
+    source = "akshare"
+    fallback_used = False
+    errors: list[str] = []
     try:
         df_hist = ak.stock_zh_a_daily(symbol=prefixed, adjust="qfq")
         df_hist.rename(columns={
@@ -288,35 +545,108 @@ def fetch_history(ticker: str) -> pd.DataFrame:
         df_hist = _finalize(df_hist)
     except Exception as exc:
         print(f"[WARN] 在线行情获取失败({ticker})，启用本地兜底: {exc}")
+        source = "local_backtest_fallback"
+        fallback_used = True
+        errors.append(str(exc))
         df_hist = _fallback_from_local_backtests()
 
     if df_hist.empty or len(df_hist) < 20:
         raise RuntimeError(f"{ticker} 历史行情不足，无法生成结构化建议")
+
+    as_of_date = str(df_hist.iloc[-1]["日期"])
+    diagnostics = {
+        "source": source,
+        "fallback_used": fallback_used,
+        "rows": int(len(df_hist)),
+        "as_of_date": as_of_date,
+        "freshness_days": _days_since_iso(as_of_date),
+        "min_required_rows": 20,
+        "coverage_target_rows": 120,
+        "status": "fallback" if fallback_used else "ok",
+        "errors": errors[:3],
+    }
+    return df_hist, diagnostics
+
+
+def fetch_history(ticker: str) -> pd.DataFrame:
+    df_hist, _ = fetch_history_with_diagnostics(ticker)
     return df_hist
 
 
-def build_rag(ticker: str, cutoff_date: str | None = None) -> SimpleRAG:
-    knowledge = fetch_external_knowledge(ticker, cutoff_date=cutoff_date)
+def _date_int_to_iso(value) -> str:
+    try:
+        text = str(int(value))
+        if len(text) != 8:
+            return ""
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+    except Exception:
+        return ""
+
+
+def _summarize_knowledge(knowledge: list[dict], *, fallback_used: bool, errors: list[str]) -> dict:
+    source_types: dict[str, int] = {}
+    latest_date_int = 0
+    for item in knowledge or []:
+        metadata = item.get("metadata", {}) if isinstance(item, dict) else {}
+        source = str(metadata.get("source", "unknown") or "unknown")
+        source_types[source] = source_types.get(source, 0) + 1
+        try:
+            latest_date_int = max(latest_date_int, int(metadata.get("date_int", 0) or 0))
+        except Exception:
+            pass
+
+    latest_date = _date_int_to_iso(latest_date_int)
+    return {
+        "source": "external_knowledge",
+        "documents": int(len(knowledge or [])),
+        "fallback_used": bool(fallback_used),
+        "source_types": source_types,
+        "latest_date": latest_date,
+        "freshness_days": _days_since_iso(latest_date) if latest_date else None,
+        "status": "fallback" if fallback_used else "ok",
+        "errors": errors[:3],
+    }
+
+
+def build_rag_with_diagnostics(ticker: str, cutoff_date: str | None = None) -> tuple[SimpleRAG, dict]:
+    errors: list[str] = []
+    fallback_used = False
+    try:
+        knowledge = fetch_external_knowledge_for_advice(ticker, cutoff_date=cutoff_date)
+    except Exception as exc:
+        knowledge = []
+        errors.append(str(exc))
+
     if not knowledge:
+        fallback_used = True
         knowledge = [
             {
                 "page_content": f"{ticker} 暂无可用新闻研报，建议降低新闻面权重。",
                 "metadata": {"date_int": _date_to_int(cutoff_date) if cutoff_date else 20991231, "ticker": ticker, "source": "fallback"},
             }
         ]
-    return SimpleRAG(data_sources=knowledge)
+    return SimpleRAG(data_sources=knowledge), _summarize_knowledge(
+        knowledge,
+        fallback_used=fallback_used,
+        errors=errors,
+    )
+
+
+def build_rag(ticker: str, cutoff_date: str | None = None) -> SimpleRAG:
+    rag_engine, _ = build_rag_with_diagnostics(ticker, cutoff_date=cutoff_date)
+    return rag_engine
 
 
 def generate_advice(ticker: str, debate_depth: int, human_comment: str = "", human_decision: str | None = None) -> dict:
     ticker = str(ticker).strip().zfill(6)
     memory_bank = MemoryBank()
-    df_hist = fetch_history(ticker)
+    df_hist, market_diagnostics = fetch_history_with_diagnostics(ticker)
     target_date = str(df_hist.iloc[-1]["日期"])
     if not human_comment and not human_decision:
         cached = _load_stable_cache(ticker, target_date)
         if cached:
             cache_errors = _validate_advice_payload(cached)
-            if not cache_errors:
+            if not cache_errors and cached.get("data_quality"):
                 cached = dict(cached)
                 cached["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cached["cache_hit"] = True
@@ -324,8 +654,12 @@ def generate_advice(ticker: str, debate_depth: int, human_comment: str = "", hum
     features = df_hist.tail(10)[FEATURE_COLUMNS].values
     latest = df_hist.iloc[-1]
 
-    rag_engine = build_rag(ticker, cutoff_date=target_date)
-    dl_engine = DLEngine() if str(os.getenv("ENABLE_DL_ANALYST", "1")).strip() != "0" else None
+    rag_engine, rag_diagnostics = build_rag_with_diagnostics(ticker, cutoff_date=target_date)
+    dl_engine = None
+    if str(os.getenv("ENABLE_DL_ANALYST", "1")).strip() != "0":
+        from dl.predictor import DLEngine
+
+        dl_engine = DLEngine()
     technical_flow_analyst = TechnicalFlowAnalyst(name="技术资金综合分析师", dl_engine=dl_engine)
     fundamental_news_analyst = FundamentalNewsAnalyst(name="基本面新闻综合分析师", rag_engine=rag_engine)
     referee = GameReferee(name="无情裁判官", memory_bank=memory_bank)
@@ -346,6 +680,12 @@ def generate_advice(ticker: str, debate_depth: int, human_comment: str = "", hum
     )
     final_instruction = risk_manager.step(ticker, referee_decision)
     execution_action = trader.step(final_instruction)
+    data_quality = assess_data_quality(
+        market_diagnostics=market_diagnostics,
+        rag_diagnostics=rag_diagnostics,
+        technical_case=technical_case,
+        fundamental_case=fundamental_case,
+    )
 
     advice = {
         "ticker": ticker,
@@ -377,7 +717,13 @@ def generate_advice(ticker: str, debate_depth: int, human_comment: str = "", hum
             "debate_trace": referee_decision.get("debate_trace", []),
         },
         "risk": final_instruction,
+        "data_quality": data_quality,
     }
+    advice["recommendation"] = calibrate_recommendation_by_quality(
+        advice["recommendation"],
+        advice["risk"],
+        data_quality,
+    )
     advice["cache_hit"] = False
     stability = _compute_stability(advice)
     advice.update(stability)

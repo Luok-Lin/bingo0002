@@ -1457,6 +1457,82 @@ function renderStabilityPanel(data) {
   `;
 }
 
+function qualityLevelText(level = "") {
+  const value = String(level || "").toLowerCase();
+  if (value === "high") return "高";
+  if (value === "medium") return "中";
+  if (value === "low") return "低";
+  return "-";
+}
+
+function renderScoreBar(score, className = "") {
+  const n = Number(score);
+  const safe = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+  return `
+    <div class="quality-score-track ${className}">
+      <div class="quality-score-fill" style="width:${Math.round(safe * 100)}%"></div>
+    </div>
+  `;
+}
+
+function renderDataQualityPanel(data) {
+  const host = document.getElementById("dataQualityPanel");
+  if (!host) return;
+  const quality = data && typeof data === "object" ? data.data_quality || {} : {};
+  if (!quality || !Object.keys(quality).length) {
+    host.textContent = "数据质量：-";
+    return;
+  }
+  const score = Number(quality.score);
+  const level = String(quality.level || "").toLowerCase();
+  const market = quality.market || {};
+  const rag = quality.rag || {};
+  const analyst = quality.analyst || {};
+  const components = quality.components || {};
+  const diagnostics = Array.isArray(quality.diagnostics) ? quality.diagnostics : [];
+  const sourceTypes = rag.source_types && typeof rag.source_types === "object" ? rag.source_types : {};
+  const sourceTypeText = Object.entries(sourceTypes)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(" / ") || "-";
+  const levelClass =
+    level === "high"
+      ? "quality-level-high"
+      : level === "medium"
+        ? "quality-level-medium"
+        : level === "low"
+          ? "quality-level-low"
+          : "";
+
+  host.innerHTML = `
+    <div class="quality-head">
+      <span class="quality-title">综合质量</span>
+      <span class="quality-score">${Number.isFinite(score) ? score.toFixed(2) : "-"}</span>
+    </div>
+    ${renderScoreBar(score)}
+    <div class="quality-head">
+      <span class="quality-title">等级</span>
+      <span class="quality-level ${levelClass}">${qualityLevelText(level)}</span>
+    </div>
+    <div class="quality-note">${escapeHtml(quality.note || "暂无质量说明")}</div>
+    <div class="quality-mini-grid">
+      <div><span>行情</span><b>${escapeHtml(market.source || "-")}</b></div>
+      <div><span>样本</span><b>${market.rows ?? "-"}</b></div>
+      <div><span>日期</span><b>${escapeHtml(market.as_of_date || "-")}</b></div>
+      <div><span>RAG</span><b>${rag.documents ?? "-"}</b></div>
+      <div><span>来源</span><b>${escapeHtml(sourceTypeText)}</b></div>
+      <div><span>解析失败</span><b>${analyst.parse_fail_count ?? "-"}</b></div>
+    </div>
+    <div class="quality-components">
+      <div><span>行情</span>${renderScoreBar(components.market_score, "quality-bar-compact")}</div>
+      <div><span>研报</span>${renderScoreBar(components.rag_score, "quality-bar-compact")}</div>
+      <div><span>分析</span>${renderScoreBar(components.analyst_score, "quality-bar-compact")}</div>
+    </div>
+    <div class="quality-chips">
+      ${diagnostics.map((x) => `<span>${escapeHtml(x)}</span>`).join("")}
+    </div>
+  `;
+}
+
 function clearAdvicePanelsForGenerating() {
   setAdviceProgress("info", "正在生成建议…", 15);
   document.getElementById("signalAction").innerHTML = "-";
@@ -1474,6 +1550,7 @@ function clearAdvicePanelsForGenerating() {
   );
   drawMiniKline(document.getElementById("miniPnlChart"), []);
   renderStabilityPanel(null);
+  renderDataQualityPanel(null);
 }
 
 function renderAdviceSummary(data) {
@@ -1486,6 +1563,7 @@ function renderAdviceSummary(data) {
   const decisionNote = buildDecisionConsistencyNote(rec, risk);
   const riskReason = buildRiskReason(risk, rec);
   const fullReason = buildFinalReason(rec, referee, analysts, riskReason);
+  const dataQuality = data.data_quality || {};
   const briefReason = toBriefReason(
     fullReason,
     "综合多Agent观点后给出当前执行建议。",
@@ -1509,9 +1587,17 @@ function renderAdviceSummary(data) {
         <div class="summary-title">置信度</div>
         <div class="summary-value">${fmtNumber(rec.confidence)}</div>
       </div>
+      <div class="summary-card">
+        <div class="summary-title">数据质量</div>
+        <div class="summary-value">${Number.isFinite(Number(dataQuality.score)) ? Number(dataQuality.score).toFixed(2) : "-"} / ${qualityLevelText(dataQuality.level)}</div>
+      </div>
       <div class="summary-card full-span">
         <div class="summary-title">结论摘要</div>
         <div class="summary-value long-text">${briefReason}</div>
+      </div>
+      <div class="summary-card full-span">
+        <div class="summary-title">证据校准</div>
+        <div class="summary-value long-text">${escapeHtml(rec.data_quality_note || dataQuality.note || "暂无数据质量校准说明")}</div>
       </div>
       <div class="summary-card full-span">
         <div class="summary-title">执行说明</div>
@@ -1627,6 +1713,7 @@ async function renderTraceFromAdvice(data) {
     drawMiniKline(document.getElementById("miniPnlChart"), []);
   }
   renderStabilityPanel(data);
+  renderDataQualityPanel(data);
 
   setStatus("多Agent链路已加载");
 }
