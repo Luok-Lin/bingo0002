@@ -6,6 +6,7 @@ from agents.llm_client import (
     LLMClientConfig,
     extract_json_object,
     is_valid_json_payload,
+    repair_json_text,
     rule_based_fallback,
 )
 
@@ -18,6 +19,11 @@ class LLMClientTests(unittest.TestCase):
     def test_schema_validation_requires_minimum_keys(self):
         self.assertTrue(is_valid_json_payload('{"sentiment":"neutral","confidence":0.5}', ["sentiment", "confidence"]))
         self.assertFalse(is_valid_json_payload('{"sentiment":"neutral"}', ["sentiment", "confidence", "reasoning"]))
+
+    def test_repair_json_text_handles_common_model_artifacts(self):
+        raw = '结论如下：```json\n{“sentiment”: “negative”, “confidence”: 0.62,}\n```'
+        self.assertEqual(repair_json_text(raw), '{"sentiment": "negative", "confidence": 0.62}')
+        self.assertTrue(is_valid_json_payload(raw, ["sentiment", "confidence"]))
 
     def test_rule_fallback_is_json(self):
         payload = json.loads(rule_based_fallback("上涨 突破 利好", "unit test"))

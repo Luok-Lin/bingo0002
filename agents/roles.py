@@ -4,7 +4,9 @@ import time
 from dataflows.providers.akshare_provider import AkShareProvider
 import json
 import os
+import re
 from rl.reward import compute_trade_reward
+from .llm_client import repair_json_text
 
 from .debate_consensus import (
     build_alignment_bundle,
@@ -13,6 +15,20 @@ from .debate_consensus import (
 )
 
 provider = AkShareProvider()
+
+SIMPLE_ANALYST_JSON_CONTRACT = (
+    "\n\n【输出格式】只输出一个合法 JSON 对象，不要包含 Markdown、解释前缀或额外文字。"
+    "字段固定为："
+    '{"sentiment":"positive/negative/neutral","confidence":0.0到1.0,'
+    '"reasoning":"50字内结论","thought_process":"80字内依据"}'
+)
+
+
+def enforce_json_contract(prompt: str, contract: str = SIMPLE_ANALYST_JSON_CONTRACT) -> str:
+    text = str(prompt or "")
+    if "json" in text.lower() and ("只输出" in text or "输出纯" in text or "合法" in text):
+        return text
+    return text + contract
 
 # 加载结构化角色定义
 ROLE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "json", "roles.json")
@@ -26,38 +42,69 @@ def parse_llm_json(llm_result: str):
     """尝试将大模型返回解析为结构化的JSON字典数据"""
     raw = str(llm_result or "")
     try:
-        # 清理可能包含的markdown json代码块标记
-        cleaned = raw.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        elif cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-        if not cleaned.startswith("{"):
-            import re
-            m = re.search(r"\{[\s\S]*\}", cleaned)
-            if m:
-                cleaned = m.group(0).strip()
+        cleaned = repair_json_text(raw)
         parsed = json.loads(cleaned.strip())
         if isinstance(parsed, dict):
             parsed["_parse_ok"] = True
             return parsed
         raise ValueError("parsed json is not object")
     except Exception as e:
-        # Fallback 策略
-        sentiment = "neutral"
-        if "positive" in raw.lower(): sentiment = "positive"
-        elif "negative" in raw.lower(): sentiment = "negative"
+        sentiment = infer_sentiment_from_text(raw)
+        confidence = infer_confidence_from_text(raw, default=0.5)
         return {
             "sentiment": sentiment,
-            "reasoning": raw,
-            "thought_process": "解析失败，无法获取思维链",
-            "confidence": 0.5,
+            "reasoning": compact_reasoning(raw),
+            "thought_process": "模型未返回合法JSON，已从原始文本抽取方向信号。",
+            "confidence": confidence,
             "_parse_ok": False,
             "_parse_error": str(e),
         }
+
+
+def infer_sentiment_from_text(text: str) -> str:
+    raw = str(text or "")
+    lowered = raw.lower()
+    if any(x in lowered for x in ("positive", "bullish", "buy")) or any(x in raw for x in ("看多", "买入", "增持", "吸筹", "净流入")):
+        return "positive"
+    if any(x in lowered for x in ("negative", "bearish", "sell")) or any(x in raw for x in ("看空", "卖出", "减持", "出货", "净流出", "承压")):
+        return "negative"
+    return "neutral"
+
+
+def infer_confidence_from_text(text: str, default: float = 0.5) -> float:
+    raw = str(text or "")
+    patterns = [
+        r'"confidence"\s*[:：]\s*([0-9]*\.?[0-9]+)',
+        r"置信度\s*[:：]?\s*([0-9]*\.?[0-9]+)\s*%",
+        r"置信度\s*[:：]?\s*([0-9]*\.?[0-9]+)",
+        r"confidence\s*[:：]?\s*([0-9]*\.?[0-9]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, raw, flags=re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            value = float(match.group(1))
+            if value > 1:
+                value = value / 100.0
+            return max(0.0, min(1.0, value))
+        except Exception:
+            continue
+    return default
+
+
+def compact_reasoning(text: str, max_len: int = 180) -> str:
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not raw:
+        return "模型输出为空，无法提取理由。"
+    return raw if len(raw) <= max_len else raw[:max_len] + "..."
+
+
+def with_parse_meta(payload: dict, parsed: dict) -> dict:
+    payload["_parse_ok"] = bool(parsed.get("_parse_ok", True))
+    if parsed.get("_parse_error"):
+        payload["_parse_error"] = str(parsed.get("_parse_error"))
+    return payload
 
 
 def normalize_decision(value: str) -> str:
@@ -188,7 +235,7 @@ class TechnicalAnalyst(BaseAgent):
             "prompt_template", 
             "你是一个专业的技术面量化分析师。针对股票 {ticker}，以下是它最新截面的量价技术面数据：\n{data}\n请判断技术面当前呈现出的涨跌倾向。请在回答最后明确包含 'positive', 'negative'，或 'neutral' 中的一个英文单词代表情绪。你的理由尽量简短(50字以内)。"
         )
-        prompt = prompt_template.format(ticker=ticker, data=data_str)
+        prompt = enforce_json_contract(prompt_template.format(ticker=ticker, data=data_str))
         llm_result = self.query_llm(prompt)
         self.log(f"LLM根据技术面数据推理得出: {llm_result}")
         
@@ -198,7 +245,7 @@ class TechnicalAnalyst(BaseAgent):
         thought_process = parsed.get("thought_process", "无")
         confidence = parsed.get("confidence", 0.5)
         
-        return {"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 class SentimentAnalyst(BaseAgent):
     def __init__(self, name: str):
@@ -216,7 +263,7 @@ class SentimentAnalyst(BaseAgent):
             "prompt_template",
             "你是一名专门对接对冲基金的散户舆情与新闻情感分析师。对于股票代码 {ticker}，相关市场舆情如下：\n{data}\n请你研判整体散户与新闻面传递出的情绪是多头还是空头。请在回答段落最后明确输出 'positive', 'negative'，或 'neutral'。附带简短推理逻辑(50字以内)。"
         )
-        prompt = prompt_template.format(ticker=ticker, data=news_str)
+        prompt = enforce_json_contract(prompt_template.format(ticker=ticker, data=news_str))
         llm_result = self.query_llm(prompt)
         self.log(f"LLM根据舆情数据推理得出: {llm_result}")
         
@@ -226,7 +273,7 @@ class SentimentAnalyst(BaseAgent):
         thought_process = parsed.get("thought_process", "无")
         confidence = parsed.get("confidence", 0.5)
         
-        return {"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 class FundamentalAnalyst(BaseAgent):
     def __init__(self, name: str):
@@ -243,7 +290,7 @@ class FundamentalAnalyst(BaseAgent):
             "prompt_template",
             "你是一名资深的价值投资基本面分析师。针对股票 {ticker}，以下是最新的真实基本面估值数据：\n{data}\n结合该行业的普遍情况与估值分布（如PE/PB是否具备安全边际），研判当前基本面健康度。请在结尾明确包含 'positive', 'negative' 或 'neutral'。 给出极简分析逻辑(50字内)。"
         )
-        prompt = prompt_template.format(ticker=ticker, data=data_str)
+        prompt = enforce_json_contract(prompt_template.format(ticker=ticker, data=data_str))
         llm_result = self.query_llm(prompt)
         self.log(f"LLM根据基本面数据推理得出: {llm_result}")
         
@@ -253,7 +300,7 @@ class FundamentalAnalyst(BaseAgent):
         thought_process = parsed.get("thought_process", "无")
         confidence = parsed.get("confidence", 0.5)
             
-        return {"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 class MacroAnalyst(BaseAgent):
     def __init__(self, name: str):
@@ -270,7 +317,7 @@ class MacroAnalyst(BaseAgent):
             "prompt_template",
             "你是一名宏观经济及大盘系统性风险分析师。结合以下A股上证大盘近期的真实指标：\n{data}\n请判断当前市场整体系统性环境、流动性情绪对做多个股是否具备支撑。回答结尾必须明确输出 'positive', 'negative' 或 'neutral'，理由需非常精简(不超过50字) 。"
         )
-        prompt = prompt_template.format(ticker=ticker, data=macro_str)
+        prompt = enforce_json_contract(prompt_template.format(ticker=ticker, data=macro_str))
         llm_result = self.query_llm(prompt)
         self.log(f"LLM根据宏观大盘数据推理得出: {llm_result}")
         
@@ -280,7 +327,7 @@ class MacroAnalyst(BaseAgent):
         thought_process = parsed.get("thought_process", "无")
         confidence = parsed.get("confidence", 0.5)
             
-        return {"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 class SmartMoneyAnalyst(BaseAgent):
     def __init__(self, name: str):
@@ -297,7 +344,7 @@ class SmartMoneyAnalyst(BaseAgent):
             "prompt_template",
             "你是量化团队中的主力游资（Smart Money）追踪监测分析师。对于股票 {ticker}，以下是你捕获到的最新主力净流入异动数据：\n{data}\n请判断游资或机构主力目前是在洗盘吸筹、出货派发还是观望。最后一行必须包含 'positive', 'negative' 或 'neutral'。 理由请控制在50字左右。"
         )
-        prompt = prompt_template.format(ticker=ticker, data=flow_str)
+        prompt = enforce_json_contract(prompt_template.format(ticker=ticker, data=flow_str))
         llm_result = self.query_llm(prompt)
         self.log(f"LLM根据主力资金数据推理得出: {llm_result}")
         
@@ -307,7 +354,7 @@ class SmartMoneyAnalyst(BaseAgent):
         thought_process = parsed.get("thought_process", "无")
         confidence = parsed.get("confidence", 0.5)
             
-        return {"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": confidence, "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 class NewsAnalystAgent(BaseAgent):
     def __init__(self, name: str, rag_engine):
@@ -420,7 +467,7 @@ class NewsAnalystAgent(BaseAgent):
             reasoning = f"{reasoning}（证据不足，仅作轻微倾向）"
         
         self.log(f"✅ RAG 特工最终裁决: {sentiment} (置信度:{confidence})")
-        return {"agent": self.name, "sentiment": sentiment, "confidence": float(confidence), "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": float(confidence), "reasoning": reasoning, "thought_process": thought_process}, parsed_final)
 
 class QuantResearcherAgent(BaseAgent):
     def __init__(self, name: str, dl_engine):
@@ -469,7 +516,7 @@ class QuantResearcherAgent(BaseAgent):
         confidence = parsed.get("confidence", dl_confidence)
         thought_process = parsed.get("thought_process", f"深度学习引擎计算的出趋势预测为{trend}。")
         
-        return {"agent": self.name, "sentiment": sentiment, "confidence": float(confidence), "reasoning": reasoning, "thought_process": thought_process}
+        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": float(confidence), "reasoning": reasoning, "thought_process": thought_process}, parsed)
 
 
 class CombinedAnalystAgent(BaseAgent):

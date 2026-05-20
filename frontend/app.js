@@ -1,14 +1,33 @@
-const resolveDefaultApiBase = () => {
+const resolveSameOriginApiBase = () => {
   const { protocol, hostname, port } = window.location;
   const host = String(hostname || "").trim();
   if (!host) return "http://127.0.0.1:8000";
-  // 后端已托管 frontend/ 时走同源，避免跨域与错误端口
-  if (port === "8000" || port === "") {
-    return `${protocol}//${host}${port ? `:${port}` : ""}`;
-  }
-  return `${protocol}//${host}:8000`;
+  return `${protocol}//${host}${port ? `:${port}` : ""}`;
 };
-const API_BASE = window.localStorage.getItem("apiBase") || resolveDefaultApiBase();
+
+const resolveDefaultApiBase = () => {
+  const { hostname, port } = window.location;
+  const host = String(hostname || "").trim();
+  if (!host) return "http://127.0.0.1:8000";
+  // 后端已托管 frontend/ 时走同源，避免跨域与错误端口
+  if (port === "" || /^800\d$/.test(String(port || ""))) {
+    return resolveSameOriginApiBase();
+  }
+  return `${window.location.protocol}//${host}:8000`;
+};
+
+const resolveApiBase = () => {
+  const stored = String(window.localStorage.getItem("apiBase") || "").trim();
+  const sameOrigin = resolveSameOriginApiBase();
+  if (!stored) return resolveDefaultApiBase();
+  const staleLocal8000 =
+    /^https?:\/\/(127\.0\.0\.1|localhost):8000$/i.test(stored) &&
+    /^https?:\/\/(127\.0\.0\.1|localhost):800\d$/i.test(sameOrigin) &&
+    stored !== sameOrigin;
+  return staleLocal8000 ? sameOrigin : stored;
+};
+
+let API_BASE = resolveApiBase();
 const API_TIMEOUT_MS = 15000;
 const ADVICE_API_TIMEOUT_MS = 60000;
 const ADVICE_POLL_MAX_WAIT_MS = 600000;
@@ -1442,6 +1461,12 @@ function renderStabilityPanel(data) {
   const parseFails = diagnostics.parse_fail_count ?? "-";
   const fallbackCount = diagnostics.rule_fallback_count ?? "-";
   const emptyCount = diagnostics.empty_reason_count ?? "-";
+  const parseFailures = Array.isArray(diagnostics.parse_failures) ? diagnostics.parse_failures : [];
+  const parseFailDetail = parseFailures.length
+    ? `<div class="stability-fail-list">${parseFailures
+        .map((x) => `<span>${escapeHtml(x.agent || x.path || "unknown")}</span>`)
+        .join("")}</div>`
+    : "";
 
   host.innerHTML = `
     <div class="stability-head">
@@ -1454,6 +1479,7 @@ function renderStabilityPanel(data) {
     </div>
     <div class="stability-note">${note}</div>
     <div class="stability-note">解析失败:${parseFails} | 规则降级:${fallbackCount} | 空理由:${emptyCount}</div>
+    ${parseFailDetail}
   `;
 }
 

@@ -877,6 +877,23 @@ td {
   line-height: 1.5;
 }
 
+.stability-fail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.stability-fail-list span {
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .quality-head {
   display: flex;
   align-items: center;

@@ -1,6 +1,10 @@
 import unittest
 
-from scripts.investment_advice import assess_data_quality, calibrate_recommendation_by_quality
+from scripts.investment_advice import (
+    _compute_stability,
+    assess_data_quality,
+    calibrate_recommendation_by_quality,
+)
 
 
 class InvestmentAdviceQualityTests(unittest.TestCase):
@@ -96,6 +100,43 @@ class InvestmentAdviceQualityTests(unittest.TestCase):
         self.assertEqual(calibrated["confidence"], 0.7)
         self.assertEqual(calibrated["position_percent"], 0.0)
         self.assertFalse(risk.get("quality_adjusted", False))
+
+    def test_stability_counts_structured_parse_failures(self):
+        advice = {
+            "recommendation": {"action": "HOLD", "confidence": 0.7, "reason": "保持观望"},
+            "risk": {"decision": "HOLD", "reason": "风控观望"},
+            "referee": {"decision": "HOLD", "confidence": 0.7},
+            "analyst_cases": {
+                "technical_flow": {
+                    "sentiment": "negative",
+                    "confidence": 0.6,
+                    "reasoning": "技术承压",
+                    "source_reports": [
+                        {
+                            "agent": "技术面子模块",
+                            "sentiment": "negative",
+                            "confidence": 0.5,
+                            "reasoning": "不是靠文本解析失败四个字统计",
+                            "_parse_ok": False,
+                            "_parse_error": "unit test",
+                        }
+                    ],
+                },
+                "fundamental_news": {
+                    "sentiment": "negative",
+                    "confidence": 0.6,
+                    "reasoning": "估值承压",
+                },
+            },
+        }
+
+        stability = _compute_stability(advice)
+
+        self.assertEqual(stability["stability_diagnostics"]["parse_fail_count"], 1)
+        self.assertEqual(
+            stability["stability_diagnostics"]["parse_failures"][0]["agent"],
+            "技术面子模块",
+        )
 
 
 if __name__ == "__main__":

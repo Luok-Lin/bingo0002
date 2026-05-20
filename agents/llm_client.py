@@ -67,8 +67,26 @@ def extract_json_object(raw_text: str) -> str:
     return text
 
 
+def repair_json_text(raw_text: str) -> str:
+    text = extract_json_object(raw_text)
+    if not text:
+        return text
+    text = (
+        text.replace("“", '"')
+        .replace("”", '"')
+        .replace("‘", "'")
+        .replace("’", "'")
+        .replace("：", ":")
+    )
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    text = re.sub(r"\bTrue\b", "true", text)
+    text = re.sub(r"\bFalse\b", "false", text)
+    text = re.sub(r"\bNone\b", "null", text)
+    return text
+
+
 def is_valid_json_payload(raw_text: str, schema_keys: list[str]) -> bool:
-    cleaned = extract_json_object(raw_text)
+    cleaned = repair_json_text(raw_text)
     if not cleaned:
         return False
     try:
@@ -196,11 +214,19 @@ class LLMClient:
                 user_prompt = (
                     f"{prompt}\n\n"
                     "【输出约束】仅输出一个合法 JSON 对象，不要包含解释、代码块标记或额外文字。"
+                    "必须使用英文双引号；布尔值必须使用 true/false；不要使用尾逗号；"
+                    "若字段无法确定，也必须给出保守默认值。"
                 )
             payload = {
                 "model": self.config.model_name,
                 "messages": [
-                    {"role": "system", "content": f"你是一个专业的金融量化系统中的 {role}。请简明扼要、客观理性地回答。"},
+                    {
+                        "role": "system",
+                        "content": (
+                            f"你是一个专业的金融量化系统中的 {role}。请简明扼要、客观理性地回答。"
+                            "当用户要求 JSON 时，你只能返回可被 json.loads 解析的 JSON 对象。"
+                        ),
+                    },
                     {"role": "user", "content": user_prompt},
                 ],
                 "max_tokens": 1024,

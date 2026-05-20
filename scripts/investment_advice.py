@@ -202,6 +202,31 @@ def _collect_reasoning_texts(advice: dict) -> list[str]:
     return [x for x in out if str(x).strip()]
 
 
+def _collect_parse_failures(advice: dict) -> list[dict]:
+    failures: list[dict] = []
+
+    def visit(obj, path: str) -> None:
+        if isinstance(obj, dict):
+            if obj.get("_parse_ok") is False:
+                failures.append(
+                    {
+                        "path": path or "root",
+                        "agent": obj.get("agent", ""),
+                        "error": str(obj.get("_parse_error", "") or "")[:160],
+                    }
+                )
+            for key, value in obj.items():
+                visit(value, f"{path}.{key}" if path else str(key))
+        elif isinstance(obj, list):
+            for idx, value in enumerate(obj):
+                visit(value, f"{path}[{idx}]")
+
+    visit(advice.get("analyst_cases", {}) or {}, "analyst_cases")
+    visit(advice.get("referee", {}) or {}, "referee")
+    visit(advice.get("risk", {}) or {}, "risk")
+    return failures
+
+
 def _compute_stability(advice: dict) -> dict:
     technical = ((advice.get("analyst_cases", {}) or {}).get("technical_flow", {}) or {})
     fundamental = ((advice.get("analyst_cases", {}) or {}).get("fundamental_news", {}) or {})
@@ -230,7 +255,8 @@ def _compute_stability(advice: dict) -> dict:
         score += 0.05
 
     texts = _collect_reasoning_texts(advice)
-    parse_fail_count = sum(1 for t in texts if "解析失败" in t)
+    parse_failures = _collect_parse_failures(advice)
+    parse_fail_count = len(parse_failures)
     fallback_count = sum(1 for t in texts if "[规则降级]" in t)
     empty_reason_count = 0
     for path in [
@@ -267,6 +293,7 @@ def _compute_stability(advice: dict) -> dict:
         "stability_note": note,
         "stability_diagnostics": {
             "parse_fail_count": parse_fail_count,
+            "parse_failures": parse_failures[:8],
             "rule_fallback_count": fallback_count,
             "empty_reason_count": empty_reason_count,
             "consensus_tech_fund": tech_sent == fund_sent,
