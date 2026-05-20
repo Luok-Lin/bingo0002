@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -143,6 +144,15 @@ def rule_based_fallback(raw_prompt: str, error_msg: str = "") -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def build_https_context() -> ssl.SSLContext | None:
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return None
+
+
 @dataclass(frozen=True)
 class LLMClientConfig:
     api_key: str
@@ -192,7 +202,8 @@ class LLMClient:
             },
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
+        context = build_https_context()
+        with urllib.request.urlopen(request, timeout=self.config.timeout_seconds, context=context) as response:
             raw = response.read().decode("utf-8")
         return json.loads(raw)
 
