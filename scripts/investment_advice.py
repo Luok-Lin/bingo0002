@@ -376,6 +376,9 @@ def assess_data_quality(
     if rag.get("fallback_used"):
         rag_score = min(rag_score, 0.25)
         diagnostics.append("新闻研报使用兜底文本")
+    if rag.get("vectorstore_degraded"):
+        rag_score = max(0.0, rag_score - 0.08)
+        diagnostics.append("向量检索降级为内存关键词检索")
     rag_score = _clamp(rag_score)
 
     analyst_score = 0.75
@@ -627,6 +630,8 @@ def _summarize_knowledge(knowledge: list[dict], *, fallback_used: bool, errors: 
         "source": "external_knowledge",
         "documents": int(len(knowledge or [])),
         "fallback_used": bool(fallback_used),
+        "vectorstore_degraded": False,
+        "degraded_reason": "",
         "source_types": source_types,
         "latest_date": latest_date,
         "freshness_days": _days_since_iso(latest_date) if latest_date else None,
@@ -652,11 +657,17 @@ def build_rag_with_diagnostics(ticker: str, cutoff_date: str | None = None) -> t
                 "metadata": {"date_int": _date_to_int(cutoff_date) if cutoff_date else 20991231, "ticker": ticker, "source": "fallback"},
             }
         ]
-    return SimpleRAG(data_sources=knowledge), _summarize_knowledge(
+    rag_engine = SimpleRAG(data_sources=knowledge)
+    diagnostics = _summarize_knowledge(
         knowledge,
         fallback_used=fallback_used,
         errors=errors,
     )
+    if getattr(rag_engine, "degraded_reason", ""):
+        diagnostics["vectorstore_degraded"] = True
+        diagnostics["degraded_reason"] = str(getattr(rag_engine, "degraded_reason", ""))[:240]
+        diagnostics["status"] = "degraded"
+    return rag_engine, diagnostics
 
 
 def build_rag(ticker: str, cutoff_date: str | None = None) -> SimpleRAG:

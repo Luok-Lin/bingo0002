@@ -43,6 +43,22 @@ class SimpleRAGTests(unittest.TestCase):
         self.assertEqual(docs, ["fallback doc"])
         self.assertEqual(len(rag.vectorstore.filters), 2)
 
+    def test_missing_vector_dependencies_use_memory_retrieval(self):
+        with patch("rag.retriever.get_embedding_function", side_effect=RuntimeError("missing embeddings")):
+            rag = SimpleRAG(
+                data_sources=[
+                    {
+                        "page_content": "600519 一季度业绩稳健，机构评级增持",
+                        "metadata": {"ticker": "600519", "source": "report", "date_int": 20260518},
+                    }
+                ]
+            )
+
+        self.assertIsNone(rag.vectorstore)
+        self.assertIn("missing embeddings", rag.degraded_reason)
+        docs = rag.retrieve("600519 一季度", target_date="2026-05-20", ticker="600519", top_k=1)
+        self.assertEqual(docs, ["600519 一季度业绩稳健，机构评级增持"])
+
     def test_chroma_persist_dir_uses_env_relative_to_project_base(self):
         with patch.dict("os.environ", {"CHROMA_PERSIST_DIR": "custom_chroma"}):
             path = resolve_chroma_persist_dir("/tmp/project")

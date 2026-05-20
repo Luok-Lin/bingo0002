@@ -1544,7 +1544,7 @@ function renderDataQualityPanel(data) {
       <div><span>行情</span><b>${escapeHtml(market.source || "-")}</b></div>
       <div><span>样本</span><b>${market.rows ?? "-"}</b></div>
       <div><span>日期</span><b>${escapeHtml(market.as_of_date || "-")}</b></div>
-      <div><span>RAG</span><b>${rag.documents ?? "-"}</b></div>
+      <div><span>RAG</span><b>${rag.vectorstore_degraded ? "关键词" : "向量"} / ${rag.documents ?? "-"}</b></div>
       <div><span>来源</span><b>${escapeHtml(sourceTypeText)}</b></div>
       <div><span>解析失败</span><b>${analyst.parse_fail_count ?? "-"}</b></div>
     </div>
