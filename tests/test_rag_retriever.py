@@ -20,6 +20,23 @@ class _FakeVectorStore:
         return []
 
 
+class _FakeIngestVectorStore:
+    def __init__(self):
+        self.get_ids = None
+        self.added_ids = []
+
+    def get(self, ids):
+        self.get_ids = list(ids)
+        if len(self.get_ids) != len(set(self.get_ids)):
+            raise AssertionError("vectorstore.get received duplicate ids")
+        return {"ids": []}
+
+    def add_documents(self, docs, ids):
+        self.added_ids = list(ids)
+        if len(self.added_ids) != len(set(self.added_ids)):
+            raise AssertionError("add_documents received duplicate ids")
+
+
 class SimpleRAGTests(unittest.TestCase):
     def test_normalize_marks_fallback_docs(self):
         content, metadata = SimpleRAG._normalize_item(
@@ -63,6 +80,22 @@ class SimpleRAGTests(unittest.TestCase):
         with patch.dict("os.environ", {"CHROMA_PERSIST_DIR": "custom_chroma"}):
             path = resolve_chroma_persist_dir("/tmp/project")
         self.assertEqual(path, "/tmp/project/custom_chroma")
+
+    def test_ingest_deduplicates_batch_ids_before_chroma_get(self):
+        rag = SimpleRAG.__new__(SimpleRAG)
+        rag.vectorstore = _FakeIngestVectorStore()
+        rag.memory_docs = []
+        rag.degraded_reason = ""
+        payload = {
+            "page_content": "同一条公告重复出现",
+            "metadata": {"ticker": "600519", "source": "announcement", "date_int": 20260520},
+        }
+
+        added = rag.ingest([payload, dict(payload)])
+
+        self.assertEqual(added, 1)
+        self.assertEqual(len(rag.vectorstore.get_ids), 1)
+        self.assertEqual(len(rag.vectorstore.added_ids), 1)
 
 
 if __name__ == "__main__":

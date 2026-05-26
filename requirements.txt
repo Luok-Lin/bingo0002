@@ -1,5 +1,9 @@
 numpy
 torch
+einops==0.8.1
+huggingface_hub>=0.33.1
+safetensors>=0.6.2
+tqdm>=4.67.1
 matplotlib
 pandas
 akshare
@@ -15,3 +19,4 @@ fastapi
 uvicorn
 apscheduler
 python-multipart
+reportlab

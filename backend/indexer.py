@@ -10,6 +10,7 @@ from .config import ADVICE_DIR, ADVICE_SETTLEMENT_PATH, BACKTEST_SUMMARY_DIR, IN
 from .storage import read_json, write_json
 
 _SKIPPED_ADVICE_FILES = {"top10_screening_latest.json", "rescreen_top3_latest.json", "post_tune_validation_summary.json"}
+_ADVICE_EVALUATION_HORIZONS = (1, 3, 5, 10, 20)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -88,6 +89,76 @@ def _collect_latest_backtest_runs(limit: int = 20) -> list[dict]:
     return out
 
 
+def _settlement_horizon_days(record: dict) -> int:
+    value = _safe_float(record.get("horizon_days"), 0.0)
+    if value > 0:
+        return int(value)
+    horizon = str(record.get("horizon", "")).upper().replace(" ", "")
+    if horizon.startswith("T+"):
+        try:
+            return int(horizon.split("T+", 1)[1])
+        except Exception:
+            pass
+    settlement_key = str(record.get("settlement_key", "")).upper()
+    if "::T+" in settlement_key:
+        try:
+            return int(settlement_key.rsplit("::T+", 1)[1])
+        except Exception:
+            pass
+    return 1
+
+
+def _compact_settlement_record(record: dict) -> dict:
+    horizon_days = _settlement_horizon_days(record)
+    return {
+        "settled": True,
+        "horizon": str(record.get("horizon") or f"T+{horizon_days}"),
+        "horizon_days": horizon_days,
+        "pnl_percent": round(_safe_float(record.get("pnl_percent"), 0.0), 4),
+        "market_move_percent": round(_safe_float(record.get("market_move_percent"), 0.0), 4),
+        "excess_return_vs_best_baseline": (
+            round(_safe_float(record.get("excess_return_vs_best_baseline"), 0.0), 4)
+            if record.get("excess_return_vs_best_baseline") is not None
+            else None
+        ),
+        "decision": str(record.get("decision", "")).upper(),
+        "as_of_date": record.get("as_of_date", ""),
+        "settled_date": record.get("settled_date", ""),
+        "settled_at": record.get("settled_at", ""),
+        "advice_file": record.get("advice_file", ""),
+    }
+
+
+def _latest_settlements_by_ticker() -> dict[str, dict]:
+    state = read_json(ADVICE_SETTLEMENT_PATH, {})
+    records = state.get("records", []) if isinstance(state, dict) else []
+    if not isinstance(records, list):
+        return {}
+
+    latest: dict[str, dict] = {}
+    for record in records:
+        if not isinstance(record, dict) or str(record.get("source", "")).strip() != "advice_settlement":
+            continue
+        ticker = _normalize_ticker(record.get("ticker", ""))
+        if not ticker:
+            continue
+        compact = _compact_settlement_record(record)
+        current = latest.get(ticker)
+        sort_key = (
+            str(compact.get("as_of_date") or ""),
+            int(compact.get("horizon_days") or 0),
+            str(compact.get("settled_date") or ""),
+            str(compact.get("settled_at") or ""),
+        )
+        if current is None or sort_key >= current["_sort_key"]:
+            compact["_sort_key"] = sort_key
+            latest[ticker] = compact
+
+    for row in latest.values():
+        row.pop("_sort_key", None)
+    return latest
+
+
 def _reflection_stats() -> dict:
     reflections = read_json(REFLECTIONS_PATH, [])
     if not isinstance(reflections, list):
@@ -140,33 +211,53 @@ def _advice_settlement_stats(total_files: int | None = None) -> dict:
     settled_set = set(str(x) for x in settled) if isinstance(settled, list) else set()
     if total_files is None:
         _, total_files = _collect_advice_snapshot()
-    settled_count = len(settled_set)
-    pending_count = max(0, total_files - settled_count)
+    settled_count = sum(1 for x in settled_set if "::T+" in x) + sum(1 for x in settled_set if "::T+" not in x)
+    expected_count = max(0, int(total_files or 0)) * len(_ADVICE_EVALUATION_HORIZONS)
+    pending_count = max(0, expected_count - settled_count)
     return {
         "settled_count": settled_count,
         "pending_count": pending_count,
+        "horizons": [f"T+{x}" for x in _ADVICE_EVALUATION_HORIZONS],
+        "evaluation": state.get("evaluation", {}) if isinstance(state.get("evaluation"), dict) else {},
         "updated_at": state.get("updated_at", ""),
     }
 
 
 def build_dashboard_summary() -> dict:
     latest_advice, advice_total_count = _collect_advice_snapshot()
+    latest_settlements = _latest_settlements_by_ticker()
     advice_actions = Counter()
     advice_rows: list[dict] = []
     for ticker, payload in latest_advice.items():
         rec = payload.get("recommendation", {})
+        multi_period = payload.get("multi_period_advice", {}) or {}
+        short_term = multi_period.get("short_term") or payload.get("short_term") or {}
+        swing_term = multi_period.get("swing_term") or payload.get("swing_term") or {}
         action = str(rec.get("action", "HOLD")).upper()
         advice_actions[action] += 1
-        advice_rows.append(
-            {
-                "ticker": ticker,
-                "generated_at": payload.get("generated_at"),
-                "action": action,
-                "position_percent": _safe_float(rec.get("position_percent"), 0.0),
-                "confidence": _safe_float(rec.get("confidence"), 0.0),
-                "reason": rec.get("reason", ""),
-            }
-        )
+        row = {
+            "ticker": ticker,
+            "generated_at": payload.get("generated_at"),
+            "action": action,
+            "position_percent": _safe_float(rec.get("position_percent"), 0.0),
+            "confidence": _safe_float(rec.get("confidence"), 0.0),
+            "reason": rec.get("reason", ""),
+            "short_term_action": str(short_term.get("action", "")).upper() or "",
+            "swing_term_action": str(swing_term.get("action", "")).upper() or "",
+        }
+        settlement = latest_settlements.get(ticker)
+        if settlement:
+            row["settlement"] = settlement
+            row["settled"] = True
+            row["settled_horizon"] = settlement.get("horizon", "")
+            row["settled_return_pct"] = settlement.get("pnl_percent")
+            row["settled_market_move_pct"] = settlement.get("market_move_percent")
+            row["settled_excess_best_pct"] = settlement.get("excess_return_vs_best_baseline")
+            row["settled_date"] = settlement.get("settled_date", "")
+            row["settlement_as_of_date"] = settlement.get("as_of_date", "")
+        else:
+            row["settled"] = False
+        advice_rows.append(row)
     advice_rows.sort(key=lambda x: x["generated_at"] or "", reverse=True)
 
     summary = {

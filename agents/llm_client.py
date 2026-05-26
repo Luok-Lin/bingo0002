@@ -8,6 +8,14 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+import requests
+from dotenv import load_dotenv
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DOTENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(DOTENV_PATH)
+
 
 def env_first(names: list[str], default: str = "") -> str:
     for name in names:
@@ -42,6 +50,13 @@ def env_float(name: str, default: float, lower: float, upper: float) -> float:
     except ValueError:
         value = default
     return max(lower, min(upper, value))
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def extract_schema_keys(raw_prompt: str) -> list[str]:
@@ -163,6 +178,8 @@ class LLMClientConfig:
     timeout_seconds: int
     temperature: float
     top_p: float
+    max_tokens: int = 1024
+    response_format_json: bool = False
 
 
 class LLMClient:
@@ -185,27 +202,109 @@ class LLMClient:
             model_name=env_first(["MODEL_NAME", "OPENAI_MODEL"], "deepseek-chat"),
             stable_mode=stable_mode,
             json_retry=env_int("LLM_JSON_RETRY", 3, 1, 5),
-            timeout_seconds=env_int("LLM_TIMEOUT_SECONDS", 90, 5, 180),
+            timeout_seconds=env_int("LLM_TIMEOUT_SECONDS", 120, 5, 300),
             temperature=temperature,
             top_p=top_p,
+            max_tokens=env_int("LLM_MAX_TOKENS", 1024, 128, 4096),
+            response_format_json=env_bool("LLM_RESPONSE_FORMAT_JSON", False),
         )
 
     def _post_chat_completion(self, payload: dict) -> dict:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
+        response = requests.post(
             f"{self.config.base_url}/chat/completions",
-            data=body,
+            json=payload,
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.config.api_key}",
                 "X-Failover-Enabled": "true",
             },
-            method="POST",
+            timeout=self.config.timeout_seconds,
+            proxies={"http": None, "https": None, "all": None},
         )
-        context = build_https_context()
-        with urllib.request.urlopen(request, timeout=self.config.timeout_seconds, context=context) as response:
-            raw = response.read().decode("utf-8")
-        return json.loads(raw)
+        if response.status_code >= 400:
+            raise RuntimeError(f"http {response.status_code}: {response.text[:300]}")
+        return response.json()
+
+    def public_config(self) -> dict:
+        return {
+            "base_url": self.config.base_url,
+            "model_name": self.config.model_name,
+            "stable_mode": self.config.stable_mode,
+            "timeout_seconds": self.config.timeout_seconds,
+            "max_tokens": self.config.max_tokens,
+            "response_format_json": self.config.response_format_json,
+            "api_key_configured": not looks_unconfigured_secret(self.config.api_key),
+        }
+
+    def check_connection(self) -> dict:
+        config = self.public_config()
+        if not config["api_key_configured"]:
+            return {
+                **config,
+                "ok": False,
+                "status": "unconfigured",
+                "error": "LLM API key is not configured; set API_KEY or OPENAI_API_KEY in .env",
+            }
+
+        payload = {
+            "model": self.config.model_name,
+            "messages": [
+                {"role": "system", "content": "Return a tiny JSON object."},
+                {"role": "user", "content": '{"ok": true}'},
+            ],
+            "max_tokens": 16,
+            "temperature": 0,
+        }
+        try:
+            data = self._post_chat_completion(payload)
+        except urllib.error.HTTPError as exc:
+            try:
+                error_body = exc.read().decode("utf-8")
+            except Exception:
+                error_body = ""
+            return {
+                **config,
+                "ok": False,
+                "status": "http_error",
+                "error": f"http {exc.code}: {error_body[:300]}",
+            }
+        except urllib.error.URLError as exc:
+            return {
+                **config,
+                "ok": False,
+                "status": "url_error",
+                "error": f"url error: {exc}",
+            }
+        except Exception as exc:
+            return {
+                **config,
+                "ok": False,
+                "status": "request_error",
+                "error": f"request/response parse failed: {exc}",
+            }
+
+        if "error" in data:
+            return {
+                **config,
+                "ok": False,
+                "status": "provider_error",
+                "error": str(data.get("error"))[:300],
+            }
+
+        choices = data.get("choices", [])
+        if not choices:
+            return {
+                **config,
+                "ok": False,
+                "status": "empty_response",
+                "error": "provider returned no choices",
+            }
+        return {
+            **config,
+            "ok": True,
+            "status": "ok",
+            "error": "",
+        }
 
     def query(self, prompt: str, role: str) -> str:
         if looks_unconfigured_secret(self.config.api_key):
@@ -219,7 +318,7 @@ class LLMClient:
         attempts = self.config.json_retry if require_json else 1
         last_error = ""
 
-        for _ in range(1, attempts + 1):
+        for attempt in range(1, attempts + 1):
             user_prompt = prompt
             if require_json:
                 user_prompt = (
@@ -240,11 +339,13 @@ class LLMClient:
                     },
                     {"role": "user", "content": user_prompt},
                 ],
-                "max_tokens": 1024,
+                "max_tokens": self.config.max_tokens,
                 "temperature": self.config.temperature,
                 "top_p": self.config.top_p,
                 "frequency_penalty": 1,
             }
+            if require_json and self.config.response_format_json and attempt == 1:
+                payload["response_format"] = {"type": "json_object"}
             try:
                 data = self._post_chat_completion(payload)
             except urllib.error.HTTPError as exc:

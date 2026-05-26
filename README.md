@@ -191,6 +191,46 @@ python -m http.server 5173
 
 然后浏览器打开：`http://127.0.0.1:5173`（API 默认连 `http://127.0.0.1:8000`）
 
+### 2.1) 允许非局域网用户访问
+
+如果只是把服务给同一台机器访问，默认 `127.0.0.1` 即可；如果要让其他电脑访问，需要让后端监听所有网卡：
+
+```bash
+PUBLIC_WEB=1 bash start_web.sh
+```
+
+如果部署在有公网 IP 的服务器上：
+
+```bash
+PUBLIC_WEB=1 PUBLIC_URL="https://你的域名" bash start_web.sh
+```
+
+公网访问需要满足以下条件：
+
+- 服务器有公网 IP，或已经配置内网穿透/反向代理地址。
+- 云服务器安全组、防火墙或路由器端口转发已放行访问端口。
+- 生产环境建议用 Nginx/Caddy 做 HTTPS 反向代理，再转发到本机 `127.0.0.1:8000`。
+- `.env` 中必须设置强 `ADMIN_PASSWORD`，不要使用示例值。
+- 如果前端和后端不是同源部署，把公开前端地址加入 `ALLOWED_ORIGINS`，多个地址用英文逗号分隔。
+
+常见方式：
+
+- 云服务器：把项目部署到服务器，开放 80/443，经 Nginx/Caddy 转发到 `127.0.0.1:8000`。
+- 内网穿透：本机运行后端，再用 Cloudflare Tunnel、frp、ngrok 等工具暴露一个 HTTPS 地址。
+- 仅局域网共享：运行 `PUBLIC_WEB=1 bash start_web.sh` 后，同一网络内访问 `http://你的局域网IP:8000`。
+
+本机已配置 ngrok 时，可以直接执行：
+
+```bash
+bash start_public_ngrok.sh
+```
+
+脚本会把当前本地后端 `http://127.0.0.1:8000` 暴露为一个公网 HTTPS 地址，并在终端输出可分享的 `https://...ngrok-free.app` 链接。停止公网访问时可结束 ngrok 进程，或执行：
+
+```bash
+bash stop_public_ngrok.sh
+```
+
 ### 3) 每日自进化
 
 后端内置每日自动任务（默认每天 `18:30`），执行“经验增量更新”流程；同时保留手动触发接口，支持补跑与重试。

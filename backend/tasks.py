@@ -3,13 +3,14 @@ from __future__ import annotations
 import threading
 import uuid
 import os
+import inspect
 from datetime import datetime
-from typing import Callable
+from typing import Any, Callable
 
 from .config import TASKS_PATH
 from .storage import read_json, write_json
 
-TaskCallable = Callable[[], dict]
+TaskCallable = Callable[..., dict]
 
 
 class TaskManager:
@@ -42,6 +43,52 @@ class TaskManager:
                 if task.get("task_id") == task_id:
                     task.update(kwargs)
                     break
+            self._save_tasks(tasks)
+
+    def update_progress(
+        self,
+        task_id: str,
+        *,
+        stage: str | None = None,
+        progress_percent: int | float | None = None,
+        message: str | None = None,
+        event: dict | None = None,
+        partial_result: dict | None = None,
+    ) -> None:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self._lock:
+            tasks = self._load_tasks()
+            for task in tasks:
+                if task.get("task_id") != task_id:
+                    continue
+                if stage is not None:
+                    task["stage"] = str(stage)
+                if progress_percent is not None:
+                    try:
+                        task["progress_percent"] = max(0, min(100, int(round(float(progress_percent)))))
+                    except Exception:
+                        pass
+                if message is not None:
+                    task["message"] = str(message)
+                if partial_result and isinstance(partial_result, dict):
+                    current = task.get("partial_result")
+                    if not isinstance(current, dict):
+                        current = {}
+                    current.update(partial_result)
+                    task["partial_result"] = current
+                if event and isinstance(event, dict):
+                    events = task.get("events")
+                    if not isinstance(events, list):
+                        events = []
+                    clean_event: dict[str, Any] = dict(event)
+                    clean_event.setdefault("stage", stage or task.get("stage", ""))
+                    clean_event.setdefault("status", "done")
+                    clean_event.setdefault("created_at", now)
+                    if progress_percent is not None:
+                        clean_event.setdefault("progress_percent", task.get("progress_percent"))
+                    events.append(clean_event)
+                    task["events"] = events[-100:]
+                break
             self._save_tasks(tasks)
 
     def list_tasks(self, limit: int = 50) -> list[dict]:
@@ -87,6 +134,10 @@ class TaskManager:
             "message": "",
             "result": None,
             "lock_key": lock_key or "",
+            "stage": "queued",
+            "progress_percent": 0,
+            "events": [],
+            "partial_result": {},
         }
         self._append_task(task)
 
@@ -109,15 +160,30 @@ class TaskManager:
                 )
                 return
 
-            self._update_task(task_id, status="running", started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            self._update_task(
+                task_id,
+                status="running",
+                started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                stage="running",
+                progress_percent=1,
+            )
             try:
-                result = fn()
+                def progress(**kwargs) -> None:
+                    self.update_progress(task_id, **kwargs)
+
+                try:
+                    accepts_progress = len(inspect.signature(fn).parameters) > 0
+                except Exception:
+                    accepts_progress = False
+                result = fn(progress) if accepts_progress else fn()
                 self._update_task(
                     task_id,
                     status="done",
                     ended_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     result=result,
                     message="ok",
+                    stage="done",
+                    progress_percent=100,
                 )
             except Exception as e:
                 self._update_task(

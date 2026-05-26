@@ -40,6 +40,7 @@ models/weights/
 *.scaler.pkl
 
 # IDEs and Editors
+.cursor/
 .idea/
 .vscode/
 *.swp
@@ -51,6 +52,7 @@ models/weights/
 # Local JSON Logs
 data/json/reflections.json
 data/json/financial_cache.json
+data/json/smart_money_cache.json
 data/json/backups/
 data/investment_advice/*
 !data/investment_advice/.gitkeep

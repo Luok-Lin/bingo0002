@@ -6,12 +6,16 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Literal
+from urllib.parse import quote
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from agents.llm_client import LLMClient
 
 from .config import (
     BASE_DIR,
@@ -22,21 +26,34 @@ from .config import (
     TASKS_PATH,
     TOP_HOLDINGS_CSV,
     TRAIN_UPLOAD_DIR,
+    USER_AVATAR_DIR,
     USER_ADVICE_HISTORY_PATH,
+    USER_STOCK_PERSONALIZATION_PATH,
     USERS_PATH,
     WATCHLIST_PATH,
 )
 from .indexer import build_dashboard_summary
+from .reports import build_advice_pdf_bytes
+from .strategy_rules import group_strategy_rules_for_display
 from .services import (
+    get_advice_for_report,
     get_latest_advice_for_ticker,
     get_market_ohlc_bars,
     list_recent_backtest_summaries,
     resolve_evolution_tickers,
     run_daily_evolution,
+    ask_advice_question,
+    build_advice_quality_ranking,
+    build_advice_settlement_evaluation,
+    build_portfolio_advice,
+    load_strategy_rules,
+    simulate_advice_counterfactual,
     settle_advice_experience,
     run_initial_training,
     run_investment_advice,
     _load_tickers_from_csv,
+    _normalize_personalization_preferences,
+    _normalize_user_profile,
 )
 from .storage import ensure_web_index_dir, read_json, write_json
 from .tasks import TaskManager
@@ -82,6 +99,7 @@ app.add_middleware(
 )
 
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+os.makedirs(USER_AVATAR_DIR, exist_ok=True)
 
 task_manager = TaskManager()
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
@@ -100,6 +118,8 @@ class AdviceRequest(BaseModel):
     debate_depth: int = Field(default=2, ge=1, le=6)
     human_comment: str = ""
     human_decision: str | None = None
+    user_profile: dict | None = None
+    personalization: dict | None = None
 
 
 class EvolutionRequest(BaseModel):
@@ -112,6 +132,7 @@ class EvolutionRequest(BaseModel):
 
 class AdviceSettlementRequest(BaseModel):
     max_items: int = Field(default=2000, ge=100, le=10000)
+    horizons: list[int] | None = None
 
 
 class RegisterRequest(BaseModel):
@@ -126,12 +147,59 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
+class UserAccountRequest(BaseModel):
+    email: str
+    phone: str
+    nickname: str = Field(default="", max_length=32)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class LogoutRequest(BaseModel):
     token: str | None = None
 
 
 class AdviceHistoryRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list, max_length=500)
+
+
+class AdviceQuestionRequest(BaseModel):
+    ticker: str
+    question: str = Field(min_length=2, max_length=500)
+    include_latest_advice: bool = True
+    include_rag: bool = False
+
+
+class AdviceSimulationRequest(BaseModel):
+    ticker: str
+    scenario: dict = Field(default_factory=dict)
+    user_profile: dict | None = None
+
+
+class PortfolioAdviceRequest(BaseModel):
+    holdings: list[dict] = Field(default_factory=list, max_length=100)
+    cash_percent: float = Field(default=0.0, ge=0, le=100)
+    objective: str = Field(default="balanced", max_length=32)
+    user_profile: dict | None = None
+
+
+class UserProfileRequest(BaseModel):
+    risk_profile: str = "balanced"
+    holding_period: str = "swing"
+    max_position_per_stock: float = Field(default=20.0, ge=1, le=100)
+    already_holding: bool = False
+    current_position_percent: float = Field(default=0.0, ge=0, le=100)
+    cost_price: float = Field(default=0.0, ge=0)
+    prefer_stop_loss: bool = True
+
+
+class StockPersonalizationRequest(BaseModel):
+    ticker: str
+    profile: dict | None = None
+    preferences: dict | None = None
 
 
 def _normalize_email(email: str) -> str:
@@ -145,11 +213,15 @@ def _normalize_phone(phone: str) -> str:
 def _validate_register_payload(req: RegisterRequest) -> tuple[str, str]:
     email = _normalize_email(req.email)
     phone = _normalize_phone(req.phone)
+    _validate_email_phone(email, phone)
+    return email, phone
+
+
+def _validate_email_phone(email: str, phone: str) -> None:
     if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email):
         raise HTTPException(status_code=400, detail="邮箱格式不正确。")
     if not re.match(r"^\+?\d{6,20}$", phone):
         raise HTTPException(status_code=400, detail="手机号格式不正确。")
-    return email, phone
 
 
 def _legacy_hash_password(raw_password: str, salt: str) -> str:
@@ -252,6 +324,54 @@ def _load_users() -> list[dict]:
     return users if isinstance(users, list) else []
 
 
+def _write_users(users: list[dict]) -> None:
+    write_json(USERS_PATH, users)
+
+
+def _detect_avatar_extension(content: bytes) -> str:
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+async def _read_avatar_upload(file: UploadFile) -> tuple[bytes, str]:
+    max_upload_bytes = _env_int("MAX_AVATAR_BYTES", 2 * 1024 * 1024)
+    content = bytearray()
+    while True:
+        chunk = await file.read(256 * 1024)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > max_upload_bytes:
+            raise HTTPException(status_code=413, detail=f"头像文件过大，最大允许 {max_upload_bytes} 字节。")
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空。")
+    ext = _detect_avatar_extension(bytes(content[:32]))
+    if not ext:
+        raise HTTPException(status_code=400, detail="仅支持 PNG、JPG、WEBP 或 GIF 图片。")
+    return bytes(content), ext
+
+
+def _update_user_avatar(user_id: str, avatar_url: str) -> dict:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="缺少用户身份。")
+    users = _load_users()
+    target = next((u for u in users if str(u.get("user_id", "")) == uid), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="用户不存在。")
+    target["avatar_url"] = str(avatar_url or "").strip()
+    target["avatar_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _write_users(users)
+    return _to_public_user(target)
+
+
 def _load_sessions() -> list[dict]:
     sessions = read_json(SESSIONS_PATH, [])
     return sessions if isinstance(sessions, list) else []
@@ -325,6 +445,189 @@ def _merge_user_advice_tickers(user_id: str, tickers: list[str]) -> list[str]:
     return history_map[uid]
 
 
+def _get_user_profile(user: dict) -> dict:
+    raw = user.get("user_profile") if isinstance(user, dict) else {}
+    return _normalize_user_profile(raw if isinstance(raw, dict) else {})
+
+
+def _load_user_stock_personalization_map() -> dict[str, dict]:
+    payload = read_json(USER_STOCK_PERSONALIZATION_PATH, {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_user_stock_personalization_map(payload: dict[str, dict]) -> None:
+    normalized: dict[str, dict] = {}
+    for user_id, raw_items in (payload or {}).items():
+        uid = str(user_id or "").strip()
+        if not uid or not isinstance(raw_items, dict):
+            continue
+        user_items: dict[str, dict] = {}
+        for raw_ticker, raw_config in raw_items.items():
+            ticker = _normalize_ticker(str(raw_ticker or ""))
+            if not ticker or not isinstance(raw_config, dict):
+                continue
+            profile = _normalize_user_profile(raw_config.get("profile") if isinstance(raw_config.get("profile"), dict) else {})
+            preferences = _normalize_personalization_preferences(
+                raw_config.get("preferences") if isinstance(raw_config.get("preferences"), dict) else {}
+            )
+            updated_at = str(raw_config.get("updated_at", "") or "").strip()
+            user_items[ticker] = {
+                "ticker": ticker,
+                "profile": profile,
+                "preferences": preferences,
+                "updated_at": updated_at,
+            }
+        normalized[uid] = user_items
+    write_json(USER_STOCK_PERSONALIZATION_PATH, normalized)
+
+
+def _get_user_stock_personalization(user_id: str, ticker: str, default_profile: dict | None = None) -> dict:
+    uid = str(user_id or "").strip()
+    normalized_ticker = _normalize_ticker(ticker)
+    base_profile = _normalize_user_profile(default_profile or {})
+    if not uid or not normalized_ticker:
+        return {
+            "ticker": normalized_ticker,
+            "profile": base_profile,
+            "preferences": _normalize_personalization_preferences({}),
+            "updated_at": "",
+        }
+    all_items = _load_user_stock_personalization_map()
+    user_items = all_items.get(uid) if isinstance(all_items.get(uid), dict) else {}
+    raw = user_items.get(normalized_ticker) if isinstance(user_items, dict) else None
+    if not isinstance(raw, dict):
+        return {
+            "ticker": normalized_ticker,
+            "profile": base_profile,
+            "preferences": _normalize_personalization_preferences({}),
+            "updated_at": "",
+        }
+    raw_profile = raw.get("profile") if isinstance(raw.get("profile"), dict) else {}
+    merged_profile = _normalize_user_profile({**base_profile, **raw_profile})
+    return {
+        "ticker": normalized_ticker,
+        "profile": merged_profile,
+        "preferences": _normalize_personalization_preferences(raw.get("preferences") if isinstance(raw.get("preferences"), dict) else {}),
+        "updated_at": str(raw.get("updated_at", "") or ""),
+    }
+
+
+def _update_user_stock_personalization(user_id: str, ticker: str, profile: dict | None, preferences: dict | None) -> dict:
+    uid = str(user_id or "").strip()
+    normalized_ticker = _normalize_ticker(ticker)
+    if not uid:
+        raise HTTPException(status_code=401, detail="缺少用户身份。")
+    if not normalized_ticker:
+        raise HTTPException(status_code=400, detail="股票代码无效。")
+    current_user = next((u for u in _load_users() if str(u.get("user_id", "")) == uid), None)
+    if not current_user:
+        raise HTTPException(status_code=404, detail="用户不存在。")
+    base_profile = _get_user_profile(current_user)
+    merged_profile = _normalize_user_profile({**base_profile, **(profile or {})})
+    normalized_preferences = _normalize_personalization_preferences(preferences or {})
+    all_items = _load_user_stock_personalization_map()
+    user_items = all_items.get(uid) if isinstance(all_items.get(uid), dict) else {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_items[normalized_ticker] = {
+        "ticker": normalized_ticker,
+        "profile": merged_profile,
+        "preferences": normalized_preferences,
+        "updated_at": now,
+    }
+    all_items[uid] = user_items
+    _save_user_stock_personalization_map(all_items)
+    return user_items[normalized_ticker]
+
+
+def _build_effective_user_profile_for_ticker(user: dict, ticker: str, request_personalization: dict | None = None) -> dict:
+    account_profile = _get_user_profile(user)
+    user_id = str(user.get("user_id", "") or "")
+    stock_config = _get_user_stock_personalization(user_id, ticker, default_profile=account_profile)
+    profile = stock_config.get("profile") if isinstance(stock_config.get("profile"), dict) else account_profile
+    preferences = stock_config.get("preferences") if isinstance(stock_config.get("preferences"), dict) else {}
+    if isinstance(request_personalization, dict):
+        if isinstance(request_personalization.get("profile"), dict):
+            profile = _normalize_user_profile({**profile, **request_personalization["profile"]})
+        preferences = _normalize_personalization_preferences(
+            {**preferences, **(request_personalization.get("preferences") if isinstance(request_personalization.get("preferences"), dict) else request_personalization)}
+        )
+    effective = dict(profile)
+    effective["personalization_scope"] = "stock" if stock_config.get("updated_at") else "account"
+    effective["personalization_ticker"] = _normalize_ticker(ticker)
+    effective["stock_personalization_updated_at"] = stock_config.get("updated_at", "")
+    effective["personalization_preferences"] = _normalize_personalization_preferences(preferences)
+    return effective
+
+
+def _update_user_profile(user_id: str, profile: dict) -> dict:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="缺少用户身份。")
+    normalized = _normalize_user_profile(profile)
+    users = _load_users()
+    updated = False
+    for user in users:
+        if str(user.get("user_id", "")) == uid:
+            user["user_profile"] = normalized
+            user["profile_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="用户不存在。")
+    _write_users(users)
+    return normalized
+
+
+def _update_user_account(user_id: str, *, email: str, phone: str, nickname: str = "") -> dict:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="缺少用户身份。")
+    normalized_email = _normalize_email(email)
+    normalized_phone = _normalize_phone(phone)
+    _validate_email_phone(normalized_email, normalized_phone)
+    clean_nickname = str(nickname or "").strip()[:32]
+
+    users = _load_users()
+    target = None
+    for user in users:
+        current_id = str(user.get("user_id", ""))
+        if current_id == uid:
+            target = user
+            continue
+        if _normalize_email(user.get("email", "")) == normalized_email:
+            raise HTTPException(status_code=409, detail="该邮箱已被其他账号使用。")
+        if _normalize_phone(user.get("phone", "")) == normalized_phone:
+            raise HTTPException(status_code=409, detail="该手机号已被其他账号使用。")
+    if not target:
+        raise HTTPException(status_code=404, detail="用户不存在。")
+
+    target["email"] = normalized_email
+    target["phone"] = normalized_phone
+    target["nickname"] = clean_nickname or f"用户{normalized_phone[-4:]}"
+    target["account_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _write_users(users)
+    return _to_public_user(target)
+
+
+def _change_user_password(user_id: str, current_password: str, new_password: str) -> None:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="缺少用户身份。")
+    users = _load_users()
+    target = next((u for u in users if str(u.get("user_id", "")) == uid), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="用户不存在。")
+    salt = str(target.get("password_salt", ""))
+    expected = str(target.get("password_hash", ""))
+    if not salt or not _verify_password(current_password, salt, expected):
+        raise HTTPException(status_code=403, detail="当前密码不正确。")
+    new_salt = secrets.token_hex(8)
+    target["password_salt"] = new_salt
+    target["password_hash"] = _hash_password(new_password, new_salt)
+    target["password_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _write_users(users)
+
+
 def _build_user_advice_evaluation(user_id: str) -> dict:
     tickers = set(_get_user_advice_tickers(user_id))
     if not tickers:
@@ -336,6 +639,7 @@ def _build_user_advice_evaluation(user_id: str) -> dict:
             "positive_ratio": None,
             "avg_pnl_percent": None,
             "avg_reward": None,
+            "horizon_evaluation": {},
             "last_settled_at": "",
         }
 
@@ -361,6 +665,7 @@ def _build_user_advice_evaluation(user_id: str) -> dict:
             "positive_ratio": None,
             "avg_pnl_percent": None,
             "avg_reward": None,
+            "horizon_evaluation": {},
             "last_settled_at": "",
         }
 
@@ -405,6 +710,7 @@ def _build_user_advice_evaluation(user_id: str) -> dict:
         "positive_ratio": round(positive_count / len(rows), 4) if rows else None,
         "avg_pnl_percent": round(sum(pnl_values) / len(pnl_values), 4) if pnl_values else None,
         "avg_reward": round(sum(reward_values) / len(reward_values), 4) if reward_values else None,
+        "horizon_evaluation": build_advice_settlement_evaluation(rows),
         "last_settled_at": last_settled_at,
     }
 
@@ -412,9 +718,15 @@ def _build_user_advice_evaluation(user_id: str) -> dict:
 def _to_public_user(user: dict) -> dict:
     return {
         "user_id": user.get("user_id"),
+        "role": user.get("role", "user"),
         "email": user.get("email"),
         "phone": user.get("phone"),
         "nickname": user.get("nickname"),
+        "avatar_url": user.get("avatar_url", ""),
+        "avatar_updated_at": user.get("avatar_updated_at", ""),
+        "user_profile": _get_user_profile(user),
+        "profile_updated_at": user.get("profile_updated_at", ""),
+        "account_updated_at": user.get("account_updated_at", ""),
         "created_at": user.get("created_at"),
     }
 
@@ -474,9 +786,17 @@ def _require_admin_password(raw_password: str | None) -> None:
         raise HTTPException(status_code=403, detail="管理员认证失败。")
 
 
+def _clear_startup_sessions_if_needed() -> bool:
+    if _env_flag("PERSIST_WEB_SESSIONS", default=False):
+        return False
+    _write_sessions([])
+    return True
+
+
 @app.on_event("startup")
 def _startup() -> None:
     ensure_web_index_dir()
+    _clear_startup_sessions_if_needed()
     # 每天 18:30 自动进化，且支持手动补跑。
     if not scheduler.running:
         scheduler.add_job(
@@ -519,6 +839,11 @@ def _shutdown() -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+
+@app.get("/api/llm/health")
+def llm_health() -> dict:
+    return LLMClient().check_connection()
 
 
 @app.post("/api/auth/register")
@@ -647,6 +972,94 @@ def user_advice_evaluation(authorization: str | None = Header(default=None)) -> 
     }
 
 
+@app.get("/api/user/profile")
+def user_profile_get(authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    return {
+        "status": "ok",
+        "user_profile": _get_user_profile(user),
+        "profile_updated_at": user.get("profile_updated_at", ""),
+    }
+
+
+@app.post("/api/user/profile")
+def user_profile_update(req: UserProfileRequest, authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    profile = _update_user_profile(str(user.get("user_id", "")), req.dict())
+    return {
+        "status": "ok",
+        "user_profile": profile,
+    }
+
+
+@app.get("/api/user/stock-personalization/{ticker}")
+def user_stock_personalization_get(ticker: str, authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    profile = _get_user_profile(user)
+    config = _get_user_stock_personalization(str(user.get("user_id", "")), ticker, default_profile=profile)
+    return {
+        "status": "ok",
+        **config,
+        "account_profile": profile,
+    }
+
+
+@app.post("/api/user/stock-personalization")
+def user_stock_personalization_update(req: StockPersonalizationRequest, authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    config = _update_user_stock_personalization(
+        str(user.get("user_id", "")),
+        req.ticker,
+        req.profile if isinstance(req.profile, dict) else {},
+        req.preferences if isinstance(req.preferences, dict) else {},
+    )
+    return {
+        "status": "ok",
+        **config,
+    }
+
+
+@app.post("/api/user/account")
+def user_account_update(req: UserAccountRequest, authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    public_user = _update_user_account(
+        str(user.get("user_id", "")),
+        email=req.email,
+        phone=req.phone,
+        nickname=req.nickname,
+    )
+    return {
+        "status": "ok",
+        "user": public_user,
+    }
+
+
+@app.post("/api/user/avatar")
+async def user_avatar_upload(file: UploadFile = File(...), authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    content, ext = await _read_avatar_upload(file)
+    user_id = str(user.get("user_id", "")).strip()
+    safe_user_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", user_id) or "user"
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"{safe_user_id}_{stamp}_{secrets.token_urlsafe(8)}.{ext}"
+    saved_path = os.path.join(USER_AVATAR_DIR, filename)
+    with open(saved_path, "wb") as f:
+        f.write(content)
+    avatar_url = f"/avatars/{filename}"
+    return {
+        "status": "ok",
+        "user": _update_user_avatar(user_id, avatar_url),
+        "avatar_url": avatar_url,
+    }
+
+
+@app.post("/api/user/password")
+def user_password_update(req: PasswordChangeRequest, authorization: str | None = Header(default=None)) -> dict:
+    _, user = _get_session_user(authorization)
+    _change_user_password(str(user.get("user_id", "")), req.current_password, req.new_password)
+    return {"status": "ok"}
+
+
 @app.get("/api/admin/users")
 def admin_users(x_admin_password: str | None = Header(default=None, alias="X-Admin-Password")) -> dict:
     _require_admin_password(x_admin_password)
@@ -714,14 +1127,32 @@ def advice_run(req: AdviceRequest, authorization: str | None = Header(default=No
 
     captured_user_id = user_id
     captured_ticker = req.ticker
+    captured_profile = req.user_profile
+    if captured_profile is None and user_id:
+        try:
+            _, captured_user = _get_session_user(authorization)
+            captured_profile = _build_effective_user_profile_for_ticker(captured_user, captured_ticker, req.personalization)
+        except Exception:
+            captured_profile = None
+    elif captured_profile is not None and isinstance(req.personalization, dict):
+        explicit_profile = req.personalization.get("profile") if isinstance(req.personalization.get("profile"), dict) else {}
+        explicit_preferences = (
+            req.personalization.get("preferences") if isinstance(req.personalization.get("preferences"), dict) else req.personalization
+        )
+        captured_profile = {
+            **_normalize_user_profile({**captured_profile, **explicit_profile}),
+            "personalization_preferences": _normalize_personalization_preferences(explicit_preferences),
+        }
 
-    def _do_advice() -> dict:
+    def _do_advice(progress=None) -> dict:
         payload = run_investment_advice(
             base_dir=BASE_DIR,
             ticker=captured_ticker,
             debate_depth=req.debate_depth,
             human_comment=req.human_comment,
             human_decision=req.human_decision,
+            user_profile=captured_profile,
+            progress_callback=progress,
         )
         if captured_user_id:
             ticker_val = _normalize_ticker(str(payload.get("ticker", "") or captured_ticker))
@@ -742,6 +1173,117 @@ def advice_latest(ticker: str) -> dict:
     payload = get_latest_advice_for_ticker(ticker)
     if not payload:
         raise HTTPException(status_code=404, detail="No advice found for ticker.")
+    return payload
+
+
+@app.get("/api/advice/report/{ticker}")
+def advice_report(
+    ticker: str,
+    advice_id: str | None = None,
+    generated_at: str | None = None,
+    use_llm: bool = True,
+) -> Response:
+    try:
+        payload, file_id = get_advice_for_report(ticker, advice_id=advice_id, generated_at=generated_at)
+        pdf_bytes = build_advice_pdf_bytes(payload, use_llm_narrative=use_llm)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    filename = f"{file_id}_investment_advice_report.pdf"
+    encoded = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
+    )
+
+
+@app.post("/api/advice/ask")
+def advice_ask(req: AdviceQuestionRequest, authorization: str | None = Header(default=None)) -> dict:
+    user_id = ""
+    token = _extract_bearer_token(authorization)
+    if token:
+        try:
+            _, user = _get_session_user(authorization)
+            user_id = str(user.get("user_id", ""))
+        except Exception:
+            user_id = ""
+    try:
+        payload = ask_advice_question(
+            ticker=req.ticker,
+            question=req.question,
+            include_latest_advice=req.include_latest_advice,
+            include_rag=req.include_rag,
+            user_id=user_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if user_id:
+        ticker_val = _normalize_ticker(req.ticker)
+        if ticker_val:
+            _merge_user_advice_tickers(user_id, [ticker_val])
+    return payload
+
+
+@app.post("/api/advice/simulate")
+def advice_simulate(req: AdviceSimulationRequest, authorization: str | None = Header(default=None)) -> dict:
+    profile = req.user_profile
+    token = _extract_bearer_token(authorization)
+    if profile is None and token:
+        try:
+            _, user = _get_session_user(authorization)
+            profile = _get_user_profile(user)
+        except Exception:
+            profile = None
+    try:
+        return simulate_advice_counterfactual(
+            ticker=req.ticker,
+            scenario=req.scenario or {},
+            user_profile=profile,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/portfolio/advice")
+def portfolio_advice(req: PortfolioAdviceRequest, authorization: str | None = Header(default=None)) -> dict:
+    profile = req.user_profile
+    token = _extract_bearer_token(authorization)
+    if profile is None and token:
+        try:
+            _, user = _get_session_user(authorization)
+            profile = _get_user_profile(user)
+        except Exception:
+            profile = None
+    try:
+        return build_portfolio_advice(
+            holdings=req.holdings,
+            user_profile=profile,
+            cash_percent=req.cash_percent,
+            objective=req.objective,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/strategy-rules")
+def strategy_rules(limit: int = 50, status: str | None = None) -> dict:
+    payload = load_strategy_rules()
+    rules = payload.get("rules", [])
+    if status:
+        status_value = str(status).strip().lower()
+        rules = [rule for rule in rules if str(rule.get("status", "")).lower() == status_value]
+    raw_count = len(rules)
+    rules = group_strategy_rules_for_display(rules)
+    payload["rules"] = rules[: max(1, min(200, int(limit)))]
+    payload["count"] = len(payload["rules"])
+    payload["raw_count"] = raw_count
+    payload["grouped"] = True
     return payload
 
 
@@ -806,10 +1348,15 @@ def evolution_run(req: EvolutionRequest) -> dict:
 def evolution_settle_advice(req: AdviceSettlementRequest) -> dict:
     task_id = task_manager.run_background(
         "advice_settlement_manual",
-        lambda: settle_advice_experience(base_dir=BASE_DIR, max_items=req.max_items),
+        lambda: settle_advice_experience(base_dir=BASE_DIR, max_items=req.max_items, horizons=req.horizons),
         lock_key="advice_settlement",
     )
     return {"task_id": task_id, "status": "queued"}
+
+
+@app.get("/api/advice/quality-ranking")
+def advice_quality_ranking(limit: int = 20, horizon: str | None = None, min_samples: int = 1) -> dict:
+    return build_advice_quality_ranking(limit=limit, horizon=horizon, min_samples=min_samples)
 
 
 @app.get("/api/tasks")
@@ -862,6 +1409,9 @@ def system_files(x_admin_password: str | None = Header(default=None, alias="X-Ad
         "index_summary_path": INDEX_SUMMARY_PATH,
         "evolution_history_path": EVOLUTION_HISTORY_PATH,
     }
+
+
+app.mount("/avatars", StaticFiles(directory=USER_AVATAR_DIR), name="avatars")
 
 
 if os.path.isdir(FRONTEND_DIR):

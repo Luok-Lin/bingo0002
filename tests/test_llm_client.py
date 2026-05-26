@@ -44,6 +44,50 @@ class LLMClientTests(unittest.TestCase):
         payload = json.loads(LLMClient(cfg).query("请判断：风险 承压", role="tester"))
         self.assertIn("[规则降级]", payload["reasoning"])
 
+    def test_connection_check_reports_unconfigured_without_network(self):
+        cfg = LLMClientConfig(
+            api_key="your_api_key_here",
+            base_url="https://example.invalid/v1",
+            model_name="test",
+            stable_mode=True,
+            json_retry=1,
+            timeout_seconds=5,
+            temperature=0.1,
+            top_p=0.2,
+        )
+        status = LLMClient(cfg).check_connection()
+
+        self.assertFalse(status["ok"])
+        self.assertEqual(status["status"], "unconfigured")
+        self.assertNotIn("api_key", status)
+
+    def test_json_response_format_and_token_cap_are_sent_when_enabled(self):
+        cfg = LLMClientConfig(
+            api_key="configured",
+            base_url="https://example.invalid/v1",
+            model_name="test",
+            stable_mode=True,
+            json_retry=1,
+            timeout_seconds=5,
+            temperature=0.1,
+            top_p=0.2,
+            max_tokens=256,
+            response_format_json=True,
+        )
+        client = LLMClient(cfg)
+        captured = {}
+
+        def fake_post(payload):
+            captured.update(payload)
+            return {"choices": [{"message": {"content": '{"answer":"ok","confidence":0.8}'}}]}
+
+        client._post_chat_completion = fake_post
+        raw = client.query('请输出 JSON：{"answer":"","confidence":0.0}', role="tester")
+
+        self.assertEqual(json.loads(raw)["answer"], "ok")
+        self.assertEqual(captured["max_tokens"], 256)
+        self.assertEqual(captured["response_format"], {"type": "json_object"})
+
 
 if __name__ == "__main__":
     unittest.main()

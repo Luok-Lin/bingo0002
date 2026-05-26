@@ -1,4 +1,5 @@
 from .base import BaseAgent
+import concurrent.futures
 import numpy as np
 import time
 from dataflows.providers.akshare_provider import AkShareProvider
@@ -15,6 +16,18 @@ from .debate_consensus import (
 )
 
 provider = AkShareProvider()
+
+
+def _ordered_parallel(tasks: list[tuple[str, object]]) -> list:
+    """Run independent analyst calls concurrently while preserving report order."""
+    if len(tasks) <= 1:
+        return [func() for _, func in tasks]
+    results = [None] * len(tasks)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        future_to_index = {executor.submit(func): idx for idx, (_, func) in enumerate(tasks)}
+        for future in concurrent.futures.as_completed(future_to_index):
+            results[future_to_index[future]] = future.result()
+    return results
 
 SIMPLE_ANALYST_JSON_CONTRACT = (
     "\n\n【输出格式】只输出一个合法 JSON 对象，不要包含 Markdown、解释前缀或额外文字。"
@@ -98,6 +111,35 @@ def compact_reasoning(text: str, max_len: int = 180) -> str:
     if not raw:
         return "模型输出为空，无法提取理由。"
     return raw if len(raw) <= max_len else raw[:max_len] + "..."
+
+
+def build_smart_money_proxy_from_features(features: dict | None) -> str:
+    """Use already-computed market features as a stable capital-flow proxy."""
+    if not isinstance(features, dict):
+        return ""
+    values = features.get("feature_values") if isinstance(features.get("feature_values"), dict) else features
+    if not isinstance(values, dict):
+        return ""
+    volume = values.get("volume", {}) if isinstance(values.get("volume"), dict) else {}
+    momentum = values.get("momentum", {}) if isinstance(values.get("momentum"), dict) else {}
+    trend = values.get("trend", {}) if isinstance(values.get("trend"), dict) else {}
+    if not volume:
+        return ""
+
+    volume_ratio = volume.get("volume_ratio_5_20")
+    amount_ratio = volume.get("amount_ratio_5_20")
+    turnover = volume.get("turnover")
+    turnover_pct = volume.get("turnover_percentile_60")
+    if all(x in (None, "", "-") for x in [volume_ratio, amount_ratio, turnover, turnover_pct]):
+        return ""
+
+    return (
+        "[主力资金代理] 主力资金实时接口不可用，复用本轮行情技术特征中的资金活跃度代理。"
+        f"近5/20日量比={volume_ratio}，近5/20日成交额比={amount_ratio}，"
+        f"最新换手率={turnover}%，60日换手分位={turnover_pct}，"
+        f"5日收益={momentum.get('return_5d_pct')}%，20日收益={momentum.get('return_20d_pct')}%，"
+        f"价距MA20={trend.get('price_vs_ma20_pct')}%。"
+    )
 
 
 def with_parse_meta(payload: dict, parsed: dict) -> dict:
@@ -226,7 +268,18 @@ class TechnicalAnalyst(BaseAgent):
     def step(self, ticker: str, features: np.ndarray, target_date: str = None):
         self.log(f"分析 [{ticker}] 的K线形态、均线与动量指标...")
         data_str = "暂无足够技术面数据"
-        if features is not None and len(features) > 0:
+        if isinstance(features, dict):
+            summary_text = str(features.get("summary_text", "") or "").strip()
+            raw_features = features.get("dl_features")
+            if summary_text:
+                data_str = summary_text
+                if raw_features is not None and len(raw_features) > 0:
+                    last_few_days = raw_features[-5:] if len(raw_features) > 5 else raw_features
+                    data_str += f"\n近5日原始量价矩阵: {np.round(last_few_days, 4).tolist()}"
+            elif raw_features is not None and len(raw_features) > 0:
+                last_few_days = raw_features[-5:] if len(raw_features) > 5 else raw_features
+                data_str = f"过去几天的数据特征张量 (例如标准化后的开盘、收盘等): {np.round(last_few_days, 4).tolist()}"
+        elif features is not None and len(features) > 0:
             last_few_days = features[-5:] if len(features) > 5 else features
             data_str = f"过去几天的数据特征张量 (例如标准化后的开盘、收盘等): {np.round(last_few_days, 4).tolist()}"
 
@@ -335,10 +388,24 @@ class SmartMoneyAnalyst(BaseAgent):
         super().__init__(name, role_name)
         self.config = ROLES_CONFIG.get("SmartMoneyAnalyst", {})
 
-    def step(self, ticker: str, target_date: str = None):
+    def step(self, ticker: str, target_date: str = None, market_features: dict | None = None):
         self.log(f"监控 [{ticker}] 北向资金、机构龙虎榜与大单净流入...")
         flow_str = provider.fetch_smart_money_data(ticker, cutoff_date=target_date)
+        if str(flow_str).startswith("[主力资金降级]"):
+            feature_proxy = build_smart_money_proxy_from_features(market_features)
+            if feature_proxy:
+                flow_str = f"{feature_proxy} 原始资金接口错误摘要: {flow_str}"
         self.log(f"✅ 成功提取主力大单资金净流入: {flow_str[:50]}...")
+        if str(flow_str).startswith("[主力资金降级]"):
+            return {
+                "agent": self.name,
+                "sentiment": "neutral",
+                "confidence": 0.28,
+                "reasoning": "主力资金实时接口与代理数据均不可用，资金面证据不足，维持中性。",
+                "thought_process": flow_str,
+                "_parse_ok": True,
+                "_data_degraded": True,
+            }
 
         prompt_template = self.config.get(
             "prompt_template",
@@ -476,7 +543,7 @@ class QuantResearcherAgent(BaseAgent):
         self.config = ROLES_CONFIG.get("QuantResearcherAgent", {})
 
     def step(self, ticker: str, features_override: np.ndarray = None, target_date: str = None):
-        self.log(f"输入张量特征执行 LSTM 深度模型推演...")
+        self.log("输入量价特征执行深度量化模型推演...")
         if features_override is None:
             features = np.random.rand(10, 10)
         else:
@@ -484,7 +551,25 @@ class QuantResearcherAgent(BaseAgent):
 
         # 1. 深度学习得出纯数值
         pred = self.dl.predict(ticker, features)
-        
+        model_key = str(pred.get("model", getattr(self.dl, "backend", "lstm")) or "lstm").lower()
+        model_name = str(pred.get("model_name") or ("Kronos" if model_key == "kronos" else "LSTM"))
+        if model_key == "kronos":
+            model_label = f"Kronos 金融K线基础模型 ({model_name})"
+            feature_desc = (
+                f"最近 {pred.get('lookback_rows', 'N')} 根 OHLCV K线，"
+                f"预测未来 {pred.get('horizon', 'N')} 个交易步"
+            )
+            extra_metrics = (
+                f"\n- 预测收盘: {pred.get('forecast_close', '-')}"
+                f"\n- 预测收益: {pred.get('forecast_return_pct', pred.get('score', '-'))}%"
+                f"\n- 预测波动: {pred.get('forecast_volatility_pct', '-')}%"
+                f"\n- 预测目标日: {pred.get('target_date', '-')}"
+            )
+        else:
+            model_label = "LSTM 时间序列神经网络"
+            feature_desc = "过去 10 个时间步的量价时序张量特征"
+            extra_metrics = ""
+
         dl_score = pred["score"]
         dl_confidence_str = pred.get("confidence", "50.0%").replace("%", "")
 
@@ -495,19 +580,49 @@ class QuantResearcherAgent(BaseAgent):
 
         trend = "看多" if dl_score > 0 else "看空"
 
-        self.log(f"LSTM 预测 (无情绪纯数学打分): {pred.get('trend','')} 原始分[{dl_score:.4f}] 预测置信度[{dl_confidence:.2f}]")
+        self.log(f"{model_label} 预测 (无情绪纯数学打分): {pred.get('trend','')} 原始分[{dl_score:.4f}] 预测置信度[{dl_confidence:.2f}]")
 
         # 置信度过滤：若置信度过低则直接弃用该预测，避免无效模型输出影响决策
         CONF_THRESHOLD = float(self.config.get("confidence_threshold", 0.3))
         if dl_confidence < CONF_THRESHOLD:
-            self.log(f"LSTM预测置信度不足 ({dl_confidence:.2f} < {CONF_THRESHOLD}), 已过滤，不参与多空评分。")
-            return {"agent": self.name, "sentiment": "neutral", "confidence": 0.0, "reasoning": "LSTM置信度不足，已过滤", "thought_process": "置信度过滤"}
+            self.log(f"{model_label}预测置信度不足 ({dl_confidence:.2f} < {CONF_THRESHOLD}), 已过滤，不参与多空评分。")
+            return {
+                "agent": self.name,
+                "sentiment": "neutral",
+                "confidence": 0.0,
+                "reasoning": f"{model_label}置信度不足，已过滤",
+                "thought_process": "置信度过滤",
+                "model": model_key,
+                "prediction": pred,
+            }
         
         # 2. 让 LLM 解释深度学习模型输出 (多模态 / Hybrid AI)
         prompt = self.config.get(
             "prompt_template",
             "你是一名跨模态量化分析师，专门负责将深度学习 (DL) 模型的冰冷回测数值转化为可读的交易逻辑。现在是针对股票 {ticker} 的深度学习分析：\n- 底层模型: LSTM 时间序列神经网络\n- 特征工程: 过去 10 个时间步的量价时序张量特征\n- 深度学习算力直接给出的预测值: {dl_score:.4f} (正数倾向于涨，负数倾向于跌)\n- 数学层面的置信度评估: {dl_confidence:.2%}\n请你结合算法化决策、能力圈和安全边际思维，判断这个预测值是否足够稳健。如果数学模型确定性不足，请明确指出局限性并倾向 HOLD。最终仅输出 JSON：{{\"thought_process\": \"你的跨模态融合解读思路\", \"sentiment\": \"必须是 positive, negative 或 neutral\", \"confidence\": 0.0到1.0的浮点数, \"reasoning\": \"简练的一句话量化预测总结(50字内)\"}}"
-        ).format(ticker=ticker, dl_score=dl_score, dl_confidence=dl_confidence)
+        )
+        if "model_label" not in prompt:
+            prompt = (
+                "你是一名跨模态量化分析师，专门负责将深度学习 (DL) 模型的冰冷回测数值转化为可读的交易逻辑。"
+                "现在是针对股票 {ticker} 的深度学习分析：\n"
+                "- 底层模型: {model_label}\n"
+                "- 特征工程: {feature_desc}\n"
+                "- 深度学习算力直接给出的预测值: {dl_score:.4f} (正数倾向于涨，负数倾向于跌)\n"
+                "- 数学层面的置信度评估: {dl_confidence:.2%}"
+                "{extra_metrics}\n"
+                "请你结合算法化决策、能力圈和安全边际思维，判断这个预测值是否足够稳健。"
+                "如果数学模型确定性不足，请明确指出局限性并倾向 HOLD。最终仅输出 JSON："
+                "{{\"thought_process\": \"你的跨模态融合解读思路\", \"sentiment\": \"必须是 positive, negative 或 neutral\", "
+                "\"confidence\": 0.0到1.0的浮点数, \"reasoning\": \"简练的一句话量化预测总结(50字内)\"}}"
+            )
+        prompt = prompt.format(
+            ticker=ticker,
+            dl_score=dl_score,
+            dl_confidence=dl_confidence,
+            model_label=model_label,
+            feature_desc=feature_desc,
+            extra_metrics=extra_metrics,
+        )
         llm_result = self.query_llm(prompt)
         parsed = parse_llm_json(llm_result)
         
@@ -516,7 +631,16 @@ class QuantResearcherAgent(BaseAgent):
         confidence = parsed.get("confidence", dl_confidence)
         thought_process = parsed.get("thought_process", f"深度学习引擎计算的出趋势预测为{trend}。")
         
-        return with_parse_meta({"agent": self.name, "sentiment": sentiment, "confidence": float(confidence), "reasoning": reasoning, "thought_process": thought_process}, parsed)
+        return with_parse_meta({
+            "agent": self.name,
+            "sentiment": sentiment,
+            "confidence": float(confidence),
+            "reasoning": reasoning,
+            "thought_process": thought_process,
+            "model": model_key,
+            "model_name": model_name,
+            "prediction": pred,
+        }, parsed)
 
 
 class CombinedAnalystAgent(BaseAgent):
@@ -622,12 +746,14 @@ class TechnicalFlowAnalyst(CombinedAnalystAgent):
         self.config = ROLES_CONFIG.get("TechnicalFlowAnalyst", {})
 
     def step(self, ticker: str, features: np.ndarray, target_date: str = None):
-        reports = [
-            self.technical.step(ticker, features=features, target_date=target_date),
-            self.smart_money.step(ticker, target_date=target_date),
+        dl_features = features if isinstance(features, dict) else features
+        tasks = [
+            ("technical", lambda: self.technical.step(ticker, features=features, target_date=target_date)),
+            ("smart_money", lambda: self.smart_money.step(ticker, target_date=target_date, market_features=features)),
         ]
         if self.quant is not None:
-            reports.append(self.quant.step(ticker, features_override=features, target_date=target_date))
+            tasks.append(("quant", lambda: self.quant.step(ticker, features_override=dl_features, target_date=target_date)))
+        reports = _ordered_parallel(tasks)
         prompt_template = self.config.get(
             "prompt_template",
             "你是【技术资金综合分析师】，负责把技术面趋势、主力资金行为和可用的DL量化预测合成一个交易方向。\n"
@@ -649,8 +775,10 @@ class FundamentalNewsAnalyst(CombinedAnalystAgent):
         self.config = ROLES_CONFIG.get("FundamentalNewsAnalyst", {})
 
     def step(self, ticker: str, target_date: str = None):
-        fund_report = self.fundamental.step(ticker, target_date=target_date)
-        news_report = self.news.step(ticker, target_date=target_date)
+        fund_report, news_report = _ordered_parallel([
+            ("fundamental", lambda: self.fundamental.step(ticker, target_date=target_date)),
+            ("news", lambda: self.news.step(ticker, target_date=target_date)),
+        ])
         prompt_template = self.config.get(
             "prompt_template",
             "你是【基本面新闻综合分析师】，负责把估值质量、财报线索、新闻研报和预期变化合成一个交易方向。\n"

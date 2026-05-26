@@ -2,9 +2,33 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_HOST="127.0.0.1"
-BACKEND_PORT="8000"
-FRONTEND_PORT="5173"
+cd "${ROOT_DIR}"
+if [ "${PUBLIC_WEB:-0}" = "1" ] && [ -z "${BACKEND_HOST:-}" ]; then
+  BACKEND_HOST="0.0.0.0"
+else
+  BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
+fi
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+HEALTH_HOST="${BACKEND_HOST}"
+if [ "${BACKEND_HOST}" = "0.0.0.0" ]; then
+  HEALTH_HOST="127.0.0.1"
+fi
+PUBLIC_URL="${PUBLIC_URL:-}"
+if [ -n "${PUBLIC_URL}" ]; then
+  ACCESS_URL="${PUBLIC_URL%/}"
+elif [ "${BACKEND_HOST}" = "0.0.0.0" ]; then
+  ACCESS_URL="http://<服务器公网IP或域名>:${BACKEND_PORT}"
+else
+  ACCESS_URL="http://${BACKEND_HOST}:${BACKEND_PORT}"
+fi
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "${PYTHON_BIN}" ] && [ -x "${ROOT_DIR}/.venv/bin/python" ]; then
+  PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
+fi
+if [ -z "${PYTHON_BIN}" ] && [ -x "${ROOT_DIR}/venv/bin/python" ]; then
+  PYTHON_BIN="${ROOT_DIR}/venv/bin/python"
+fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 backend_pid=""
@@ -28,6 +52,9 @@ echo "==============================================="
 echo " TradingAgents Web 一键启动脚本"
 echo "==============================================="
 echo "[*] 项目目录: ${ROOT_DIR}"
+if [ "${BACKEND_HOST}" = "0.0.0.0" ]; then
+  echo "[!] 公网/外部访问模式：后端将监听所有网卡。请确认已设置强管理员密码，并在防火墙/反向代理中只开放必要端口。"
+fi
 
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   echo "[!] 未找到 ${PYTHON_BIN}，请安装 Python 3 后重试。"
@@ -52,19 +79,22 @@ backend_pid=$!
 
 echo "[*] 等待后端启动..."
 for _ in $(seq 1 20); do
-  if curl -s "http://${BACKEND_HOST}:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
+  if curl -s "http://${HEALTH_HOST}:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
     break
   fi
   sleep 0.5
 done
 
-if ! curl -s "http://${BACKEND_HOST}:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
+if ! curl -s "http://${HEALTH_HOST}:${BACKEND_PORT}/api/health" >/dev/null 2>&1; then
   echo "[!] 后端健康检查失败，启动终止。"
   exit 1
 fi
 
 echo "[+] 后端已就绪。"
-echo "[*] 推荐直接打开: http://${BACKEND_HOST}:${BACKEND_PORT}"
+echo "[*] 推荐直接打开: ${ACCESS_URL}"
+if [ "${BACKEND_HOST}" = "0.0.0.0" ] && [ -z "${PUBLIC_URL}" ]; then
+  echo "[*] 如需非局域网访问，请把 PUBLIC_URL 设置为你的公网域名或穿透地址，例如：PUBLIC_URL=https://example.com PUBLIC_WEB=1 bash start_web.sh"
+fi
 echo "[*] 也可使用独立前端: http://127.0.0.1:${FRONTEND_PORT}（可选）"
 echo "[*] 按 Ctrl+C 停止后端。"
 

@@ -15,8 +15,14 @@
           <button id="registerBtn">注册</button>
           <button id="loginBtn">登录</button>
           <button id="logoutBtn" class="hidden">退出</button>
-          <div class="header-badge">中国人民大学</div>
-          <button id="modeSwitchBtn" class="btn-primary mode-switch-btn">切换到管理者模式</button>
+          <div class="header-badge" aria-label="中国人民大学">
+            <span class="school-emblem" aria-hidden="true">
+              <img class="school-emblem-mark" src="./assets/ruc-emblem.png" alt="" />
+            </span>
+            <span>中国人民大学</span>
+          </div>
+          <button id="userAvatarBtn" class="avatar-button hidden" aria-label="打开系统设置">TA</button>
+          <button id="modeSwitchBtn" class="hidden">切换模式</button>
         </div>
       </div>
     </header>
@@ -41,22 +47,32 @@
           <button id="authGateLoginBtn" class="btn-primary">立即登录</button>
           <button id="authGateRegisterBtn">注册新账号</button>
         </div>
+        <div class="auth-gate-emblem" aria-label="中国人民大学">
+          <img src="./assets/ruc-emblem.png" alt="中国人民大学校徽" />
+        </div>
       </div>
     </section>
 
     <main id="appMain" class="main hidden">
       <aside id="sidebarUser" class="sidebar">
-        <button class="tab-btn active" data-tab="advice">投资建议</button>
-        <button id="overviewTabBtnUser" class="tab-btn" data-tab="overview">历史投资建议总览</button>
+        <div class="sidebar-group-label">投研工作台</div>
+        <button id="overviewTabBtnUser" class="tab-btn" data-tab="overview">历史总览</button>
+        <button class="tab-btn active" data-tab="advice">单票建议</button>
+        <button class="tab-btn" data-tab="portfolio">组合建议</button>
+        <button class="tab-btn" data-tab="advisor-tools">推演与追问</button>
+        <button class="tab-btn" data-tab="decision-trace">决策链路</button>
       </aside>
       <aside id="sidebarAdmin" class="sidebar hidden">
+        <div class="sidebar-group-label">系统管理</div>
+        <button id="overviewTabBtnAdmin" class="tab-btn" data-tab="overview">系统总览</button>
         <button class="tab-btn" data-tab="training">初始化训练</button>
         <button class="tab-btn" data-tab="evolution">自进化中心</button>
-        <button id="overviewTabBtnAdmin" class="tab-btn" data-tab="overview">系统总览</button>
+        <button class="tab-btn" data-tab="strategy-rules">策略规则库</button>
+        <button class="tab-btn" data-tab="admin-users">用户管理</button>
       </aside>
 
       <section class="content">
-        <section id="overview" class="tab-panel active">
+        <section id="overview" class="tab-panel">
           <h2 id="overviewTitle">系统总览</h2>
           <div class="metric-strip">
             <div class="metric-card">
@@ -96,16 +112,30 @@
             <div id="userAdviceEval">-</div>
           </div>
           <div class="card">
-            <h3>最新建议列表（按时间）</h3>
-            <div id="overviewAdviceTable"></div>
-          </div>
-          <div id="adminUsersCard" class="card hidden">
-            <h3>用户列表（管理者）</h3>
+            <h3>建议质量排行榜与基准对照</h3>
             <div class="actions">
-              <button id="refreshUsersBtn">刷新用户列表</button>
-              <span id="usersCountText" class="actions-meta">用户数：-</span>
+              <button id="refreshQualityRankingBtn">刷新排行榜</button>
+              <span id="qualityRankingMeta" class="actions-meta">样本：-</span>
             </div>
-            <div id="adminUsersTable">-</div>
+            <div id="qualityRankingPanel">-</div>
+          </div>
+          <div class="card">
+            <h3>最新建议列表（按时间）</h3>
+            <div class="advice-filter-toolbar">
+              <div class="advice-action-filter" role="group" aria-label="按建议动作筛选">
+                <button class="advice-filter-btn active" data-advice-action="ALL">全部</button>
+                <button class="advice-filter-btn" data-advice-action="BUY">BUY</button>
+                <button class="advice-filter-btn" data-advice-action="HOLD">HOLD</button>
+                <button class="advice-filter-btn" data-advice-action="SELL">SELL</button>
+              </div>
+              <label class="advice-search-label">
+                <span>股票代码</span>
+                <input id="adviceTickerSearchInput" type="search" inputmode="numeric" placeholder="如 600519" autocomplete="off" />
+              </label>
+              <button id="clearAdviceFiltersBtn">清空筛选</button>
+              <span id="adviceFilterMeta" class="actions-meta">显示：-</span>
+            </div>
+            <div id="overviewAdviceTable"></div>
           </div>
         </section>
 
@@ -135,7 +165,7 @@
           </div>
         </section>
 
-        <section id="advice" class="tab-panel">
+        <section id="advice" class="tab-panel active">
           <h2>结构化投资建议</h2>
           <div class="form-grid">
             <label>股票代码<input id="adviceTicker" value="603156" /></label>
@@ -144,8 +174,83 @@
           <div class="actions">
             <button id="runAdviceBtn" class="btn-primary">生成建议</button>
             <button id="loadLatestAdviceBtn">读取最新建议</button>
+            <button id="downloadAdviceReportBtn" disabled title="生成或读取建议后可生成PDF报告">生成PDF报告</button>
           </div>
           <div id="adviceFeedback" class="inline-feedback info hidden"></div>
+          <div id="advicePipeline" class="advice-pipeline hidden"></div>
+          <div class="card">
+            <div class="personalization-head">
+              <h3>当前股票个性化</h3>
+              <span id="stockPersonalizationStatus" class="actions-meta">未加载</span>
+            </div>
+            <div class="form-grid">
+              <label>风险偏好
+                <select id="stockProfileRisk">
+                  <option value="conservative">保守</option>
+                  <option value="balanced">均衡</option>
+                  <option value="aggressive">激进</option>
+                </select>
+              </label>
+              <label>持有周期
+                <select id="stockProfilePeriod">
+                  <option value="intraday">日内</option>
+                  <option value="swing">波段</option>
+                  <option value="mid_term">中线</option>
+                </select>
+              </label>
+              <label>单票上限%<input id="stockProfileMaxPosition" type="number" min="1" max="100" /></label>
+              <label>当前仓位%<input id="stockProfileCurrentPosition" type="number" min="0" max="100" /></label>
+              <label>成本价<input id="stockProfileCostPrice" type="number" min="0" step="0.01" /></label>
+              <label>系统策略
+                <select id="stockUseSystemRules">
+                  <option value="true">启用</option>
+                  <option value="false">停用</option>
+                </select>
+              </label>
+              <label class="checkbox"><input id="stockProfileAlreadyHolding" type="checkbox" />已有持仓</label>
+              <label class="checkbox"><input id="stockProfilePreferStopLoss" type="checkbox" />生成止损参考</label>
+            </div>
+            <div class="constraint-editor">
+              <div class="strategy-section-title">系统策略</div>
+              <div id="stockRuleChoiceList" class="stock-rule-choice-list empty-tip">系统策略将在读取后显示</div>
+              <div class="strategy-section-title">用户自定义策略</div>
+              <div class="constraint-row">
+                <select id="customStrategyPolicy">
+                  <option value="natural_language">自动识别</option>
+                  <option value="block_buy">买入前必须满足</option>
+                  <option value="block_sell">卖出前必须满足</option>
+                  <option value="force_hold">优先观望策略</option>
+                  <option value="position_cap">仓位控制策略</option>
+                  <option value="min_confidence">置信度门槛策略</option>
+                </select>
+                <input id="customStrategyValue" type="number" step="0.01" placeholder="可选数值" />
+                <input id="customStrategyText" type="text" maxlength="120" placeholder="直接写自然语言策略，例如：只在放量回踩后买入" />
+                <button id="addCustomStrategyBtn" type="button">加入策略</button>
+              </div>
+              <div id="customStrategyList" class="constraint-list empty-tip">暂无用户自定义策略</div>
+              <div class="constraint-row">
+                <select id="customConstraintType">
+                  <option value="block_buy">禁止买入</option>
+                  <option value="block_sell">禁止卖出</option>
+                  <option value="force_hold">强制观望</option>
+                  <option value="position_cap">仓位上限</option>
+                  <option value="min_confidence">最低置信度</option>
+                </select>
+                <input id="customConstraintValue" type="number" step="0.01" placeholder="数值" />
+                <input id="customConstraintText" type="text" maxlength="120" placeholder="约束说明" />
+                <button id="addCustomConstraintBtn" type="button">添加约束</button>
+              </div>
+              <div id="customConstraintList" class="constraint-list empty-tip">暂无自定义约束</div>
+            </div>
+            <div class="actions">
+              <button id="saveStockPersonalizationBtn" class="btn-primary">保存当前股票设置</button>
+              <button id="loadStockPersonalizationBtn">读取当前股票设置</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>结构化建议</h3>
+            <div id="adviceSummary">-</div>
+          </div>
           <div class="terminal-grid">
             <div class="card">
               <h3>交易信号灯</h3>
@@ -182,8 +287,101 @@
             </div>
           </div>
           <div class="card">
-            <h3>结构化建议</h3>
-            <div id="adviceSummary">-</div>
+            <h3>多周期建议</h3>
+            <div id="multiPeriodCards" class="multi-period-grid">
+              <div class="empty-tip">生成建议后显示短线 / 中线 / 风控三张决策卡</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>数据明细</h3>
+            <div id="adviceDataDetails" class="data-detail-panel empty-tip">生成建议后显示本次建议使用的行情、技术指标与证据来源。</div>
+          </div>
+        </section>
+
+        <section id="portfolio" class="tab-panel">
+          <div class="page-heading">
+            <h2>组合建议</h2>
+            <p>按持仓权重、现金比例、用户画像和最新个股建议生成组合层面的目标权重。</p>
+          </div>
+          <div class="card">
+            <h3>组合输入</h3>
+            <div class="form-grid">
+              <label>组合目标
+                <select id="portfolioObjective">
+                  <option value="balanced" selected>均衡配置</option>
+                  <option value="growth">成长进攻</option>
+                  <option value="defensive">防守稳健</option>
+                  <option value="rebalance">再平衡</option>
+                </select>
+              </label>
+              <label>现金比例(%)<input id="portfolioCashPercent" type="number" value="10" min="0" max="100" step="0.5" /></label>
+            </div>
+            <textarea id="portfolioHoldingsInput" rows="7" placeholder="每行一只：股票代码, 当前权重%, 成本价。示例：603156, 12, 18.50"></textarea>
+            <div class="actions">
+              <button id="runPortfolioAdviceBtn" class="btn-primary">生成组合建议</button>
+              <button id="fillCurrentTickerPortfolioBtn">填入当前标的</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>组合调整结果</h3>
+            <div id="portfolioAdviceResult" class="portfolio-result empty-tip">输入组合持仓后，系统会结合最新个股建议、用户画像与错误规则库给出目标权重。</div>
+          </div>
+        </section>
+
+        <section id="advisor-tools" class="tab-panel">
+          <div class="page-heading">
+            <h2>推演与追问</h2>
+            <p>围绕当前标的做情景推演，或基于最新结构化建议继续追问。</p>
+          </div>
+          <div class="card">
+            <h3>反事实推演</h3>
+            <div class="form-grid">
+              <label>价格变化(%)<input id="simPriceChange" type="number" value="-3" step="0.1" /></label>
+              <label>大盘变化(%)<input id="simMarketChange" type="number" value="-1" step="0.1" /></label>
+              <label>成交量变化
+                <select id="simVolumeChange">
+                  <option value="">未指定</option>
+                  <option value="放量">放量</option>
+                  <option value="缩量">缩量</option>
+                </select>
+              </label>
+              <label>新闻/事件面
+                <select id="simNewsSentiment">
+                  <option value="">未指定</option>
+                  <option value="positive">利好</option>
+                  <option value="negative">利空</option>
+                </select>
+              </label>
+              <label>情景持仓(%)<input id="simUserPosition" type="number" value="0" min="0" max="100" /></label>
+              <label class="checkbox"><input id="simBreaksMa20" type="checkbox" />跌破MA20</label>
+              <label class="checkbox"><input id="simBreaksStopLoss" type="checkbox" />触发止损</label>
+            </div>
+            <div class="actions">
+              <button id="runSimulationBtn" class="btn-primary">运行推演</button>
+            </div>
+            <div id="simulationResult" class="simulation-result empty-tip">输入情景后，可以观察建议动作与仓位是否变化。</div>
+          </div>
+          <div class="card">
+            <h3>追问助手</h3>
+            <div class="qa-quick-actions">
+              <button class="qa-quick-btn" data-question="为什么给出这个建议动作？">为什么这个动作？</button>
+              <button class="qa-quick-btn" data-question="当前最大的风险是什么？">最大风险</button>
+              <button class="qa-quick-btn" data-question="什么条件下建议会发生变化？">变化条件</button>
+              <button class="qa-quick-btn" data-question="如果我已经持仓，仓位应该怎么处理？">持仓处理</button>
+            </div>
+            <div class="qa-input-row">
+              <textarea id="adviceQuestionInput" rows="3" placeholder="围绕当前标的和最新建议提问，例如：为什么不是买入？"></textarea>
+              <button id="askAdviceBtn" class="btn-primary">提问</button>
+            </div>
+            <div id="adviceQaFeedback" class="inline-feedback info hidden"></div>
+            <div id="adviceQaAnswer" class="qa-answer empty-tip">先生成或读取一条建议后，可以继续追问。</div>
+          </div>
+        </section>
+
+        <section id="decision-trace" class="tab-panel">
+          <div class="page-heading">
+            <h2>决策链路</h2>
+            <p>查看当前标的的多 Agent 推理、分析师观点、裁判与风控，以及博弈时间线。</p>
           </div>
           <div class="card">
             <h3>多Agent决策流程图</h3>
@@ -208,9 +406,14 @@
         <section id="evolution" class="tab-panel">
           <h2>自进化中心（自动+手动）</h2>
           <div class="card">
-            <h3>建议兑现闭环（T+1）</h3>
+            <h3>建议兑现闭环（多周期）</h3>
             <div class="actions">
-              <button id="settleAdviceBtn">立即兑现一次</button>
+              <button id="settleAdviceBtn" class="btn-primary" data-horizon="">全部周期</button>
+              <button class="settle-horizon-btn" data-horizon="1">T+1</button>
+              <button class="settle-horizon-btn" data-horizon="3">T+3</button>
+              <button class="settle-horizon-btn" data-horizon="5">T+5</button>
+              <button class="settle-horizon-btn" data-horizon="10">T+10</button>
+              <button class="settle-horizon-btn" data-horizon="20">T+20</button>
               <span id="settlementStatsText" class="actions-meta">已兑现：- | 待兑现：-</span>
             </div>
           </div>
@@ -242,6 +445,36 @@
           <div class="card">
             <h3>进化历史</h3>
             <div id="evolveHistory">-</div>
+          </div>
+        </section>
+
+        <section id="strategy-rules" class="tab-panel">
+          <div class="page-heading">
+            <h2>策略规则库</h2>
+            <p>查看由建议兑现错误归因沉淀出的规则，以及这些规则在后续建议中的校准依据。</p>
+          </div>
+          <div class="card">
+            <h3>规则概览</h3>
+            <div class="actions">
+              <button id="refreshStrategyRulesBtn" class="btn-primary">刷新规则库</button>
+              <span id="strategyRulesMeta" class="actions-meta">规则：-</span>
+            </div>
+            <div id="strategyRulesPanel">-</div>
+          </div>
+        </section>
+
+        <section id="admin-users" class="tab-panel">
+          <div class="page-heading">
+            <h2>用户管理</h2>
+            <p>查看已注册用户与账户画像状态。</p>
+          </div>
+          <div id="adminUsersCard" class="card hidden">
+            <h3>用户列表</h3>
+            <div class="actions">
+              <button id="refreshUsersBtn" class="btn-primary">刷新用户列表</button>
+              <span id="usersCountText" class="actions-meta">用户数：-</span>
+            </div>
+            <div id="adminUsersTable">-</div>
           </div>
         </section>
       </section>
@@ -280,16 +513,100 @@
 
     <div id="loginModal" class="modal hidden">
       <div class="modal-card">
-        <h3>用户登录</h3>
-        <p>请输入邮箱或手机号与密码。</p>
-        <div class="form-grid">
+        <h3>登录系统</h3>
+        <p>用户进入投研工作台，管理员进入系统管理后台。</p>
+        <div class="login-mode-toggle" role="group" aria-label="登录身份">
+          <button id="loginModeUserBtn" class="login-mode-btn active" data-login-mode="user">用户</button>
+          <button id="loginModeAdminBtn" class="login-mode-btn" data-login-mode="admin">管理员</button>
+        </div>
+        <div id="loginUserFields" class="form-grid">
           <label>邮箱或手机号<input id="loginAccountInput" type="text" placeholder="name@example.com / 13800138000" /></label>
           <label>密码<input id="loginPasswordInput" type="password" placeholder="请输入密码" /></label>
+        </div>
+        <div id="loginAdminFields" class="form-grid hidden">
+          <label>管理员密码<input id="loginAdminPasswordInput" type="password" placeholder="请输入管理员密码" /></label>
         </div>
         <div id="loginError" class="admin-error"></div>
         <div class="actions">
           <button id="loginSubmitBtn" class="btn-primary">登录</button>
           <button id="loginCancelBtn">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsModal" class="modal hidden">
+      <div class="modal-card settings-modal-card">
+        <div class="settings-head">
+          <div class="settings-avatar" id="settingsAvatar">TA</div>
+          <div>
+            <h3>系统设置</h3>
+            <p id="settingsSubtitle">管理账户资料、密码与默认用户画像。</p>
+          </div>
+        </div>
+        <div id="settingsAdminNotice" class="settings-notice hidden">当前为管理员会话。管理员账号使用系统级密码登录，用户资料设置仅对普通用户开放。</div>
+        <div id="settingsUserContent">
+          <div class="settings-section">
+            <h4>账户资料</h4>
+            <div class="avatar-upload-row">
+              <div>
+                <div class="avatar-upload-title">头像</div>
+                <div class="avatar-upload-hint">支持 PNG、JPG、WEBP、GIF，建议使用方形图片。</div>
+              </div>
+              <label class="avatar-file-trigger" for="settingsAvatarFileInput">选择图片</label>
+              <input id="settingsAvatarFileInput" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <button id="uploadAvatarBtn" type="button">上传头像</button>
+            </div>
+            <div class="form-grid">
+              <label>用户名<input id="settingsNicknameInput" type="text" maxlength="32" /></label>
+              <label>邮箱<input id="settingsEmailInput" type="email" /></label>
+              <label>手机号<input id="settingsPhoneInput" type="text" /></label>
+            </div>
+            <div class="actions">
+              <button id="saveAccountSettingsBtn" class="btn-primary">保存账户资料</button>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h4>密码管理</h4>
+            <div class="form-grid">
+              <label>当前密码<input id="settingsCurrentPasswordInput" type="password" /></label>
+              <label>新密码<input id="settingsNewPasswordInput" type="password" placeholder="至少 6 位" /></label>
+            </div>
+            <div class="actions">
+              <button id="changePasswordBtn">修改密码</button>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h4>用户画像</h4>
+            <div class="form-grid">
+              <label>风险偏好
+                <select id="settingsProfileRisk">
+                  <option value="conservative">保守</option>
+                  <option value="balanced">均衡</option>
+                  <option value="aggressive">激进</option>
+                </select>
+              </label>
+              <label>持有周期
+                <select id="settingsProfilePeriod">
+                  <option value="intraday">日内</option>
+                  <option value="swing">波段</option>
+                  <option value="mid_term">中线</option>
+                </select>
+              </label>
+              <label>单票仓位上限%<input id="settingsProfileMaxPosition" type="number" min="1" max="100" /></label>
+              <label>当前仓位%<input id="settingsProfileCurrentPosition" type="number" min="0" max="100" /></label>
+              <label>成本价<input id="settingsProfileCostPrice" type="number" min="0" step="0.01" /></label>
+              <label class="checkbox"><input id="settingsProfileAlreadyHolding" type="checkbox" />已有持仓</label>
+              <label class="checkbox"><input id="settingsProfilePreferStopLoss" type="checkbox" />生成止损参考</label>
+            </div>
+            <div class="actions">
+              <button id="saveSettingsProfileBtn" class="btn-primary">保存用户画像</button>
+            </div>
+          </div>
+        </div>
+        <div id="settingsError" class="admin-error"></div>
+        <div class="actions settings-footer">
+          <button id="settingsLogoutBtn">退出登录</button>
+          <button id="settingsCloseBtn">关闭</button>
         </div>
       </div>
     </div>

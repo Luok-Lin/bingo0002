@@ -116,9 +116,16 @@ class SimpleRAG:
             return added
 
         documents, ids = [], []
+        seen_batch_ids = set()
+        skipped_batch_duplicates = 0
         for page_content, metadata in normalized_items:
+            doc_id = self._build_doc_id(page_content, metadata)
+            if doc_id in seen_batch_ids:
+                skipped_batch_duplicates += 1
+                continue
+            seen_batch_ids.add(doc_id)
             documents.append(_build_document(page_content, metadata))
-            ids.append(self._build_doc_id(page_content, metadata))
+            ids.append(doc_id)
 
         if not documents:
             return 0
@@ -130,7 +137,11 @@ class SimpleRAG:
         new_ids = [doc_id for doc_id in ids if doc_id not in existing_ids]
         if new_docs:
             self.vectorstore.add_documents(new_docs, ids=new_ids)
-        print(f"[RAG Subsystem] 增量入库完成: 新增 {len(new_docs)} 条, 跳过重复 {len(documents) - len(new_docs)} 条。")
+        skipped_existing = len(documents) - len(new_docs)
+        print(
+            f"[RAG Subsystem] 增量入库完成: 新增 {len(new_docs)} 条, "
+            f"跳过历史重复 {skipped_existing} 条, 跳过批内重复 {skipped_batch_duplicates} 条。"
+        )
         return len(new_docs)
 
     def retrieve(self, query: str, target_date: str = None, ticker: str = None, top_k: int = 3):

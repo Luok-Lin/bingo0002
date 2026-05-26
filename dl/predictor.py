@@ -6,6 +6,17 @@ import os
 import pickle
 from sklearn.preprocessing import StandardScaler
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+except Exception:
+    pass
+
+try:
+    from dl.kronos_predictor import KronosAdapter
+except Exception:
+    KronosAdapter = None
+
 class StockTrendPredictor(nn.Module):
     """
     简单的 LSTM 模型用于预测带有连续因子的时间序列趋势
@@ -24,6 +35,15 @@ class StockTrendPredictor(nn.Module):
 
 class DLEngine:
     def __init__(self, weight_path="models/weights/pretrained_model.pth"):
+        self.backend = str(os.getenv("DL_BACKEND", "lstm")).strip().lower()
+        self.kronos = None
+        if self.backend in {"kronos", "auto"} and KronosAdapter is not None:
+            self.kronos = KronosAdapter()
+            if not self.kronos.available:
+                print(f"[Kronos Adapter][WARN] 不可用，将回退到 LSTM: {self.kronos.unavailable_reason}")
+        elif self.backend == "kronos":
+            print("[Kronos Adapter][WARN] dl.kronos_predictor 导入失败，将回退到 LSTM。")
+
         self.model = StockTrendPredictor(input_size=10, hidden_layer_size=64, output_size=1)
         
         # 解析绝对路径
@@ -130,7 +150,26 @@ class DLEngine:
         self._save_scaler()
         print(f"[DL Engine] 模型使用真实数据微调完毕，已保存至 {self.weight_path}")
 
-    def predict(self, ticker: str, features: np.ndarray) -> dict:
+    def _extract_feature_matrix(self, features) -> np.ndarray:
+        if isinstance(features, dict):
+            features = features.get("dl_features", features.get("features", features))
+        return np.asarray(features, dtype=float)
+
+    def predict(self, ticker: str, features) -> dict:
+        if isinstance(features, dict) and self.kronos is not None and self.kronos.available:
+            kronos_ohlcv = features.get("kronos_ohlcv")
+            if kronos_ohlcv is None:
+                kronos_ohlcv = features.get("ohlcv")
+            if kronos_ohlcv is not None:
+                try:
+                    return self.kronos.predict(ticker, kronos_ohlcv)
+                except Exception as exc:
+                    if self.backend == "kronos":
+                        print(f"[Kronos Adapter][WARN] 推理失败，将回退到 LSTM: {exc}")
+                    else:
+                        print(f"[Kronos Adapter][WARN] auto 后端推理失败，将回退到 LSTM: {exc}")
+
+        features = self._extract_feature_matrix(features)
         self.model.eval()
         with torch.no_grad():
             if not hasattr(self.scaler, 'mean_'):
